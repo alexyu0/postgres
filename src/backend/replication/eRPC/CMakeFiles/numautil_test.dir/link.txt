@@ -1,0 +1,1 @@
+g++      CMakeFiles/numautil_test.dir/tests/util_tests/numautil_test.cc.o  -o build/numautil_test -rdynamic build/liberpc.a -Wl,-Bstatic -lgtest -Wl,-Bdynamic -lrt -lnuma -lpthread -lgflags -libverbs 

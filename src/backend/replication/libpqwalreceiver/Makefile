@@ -12,7 +12,7 @@ subdir = src/backend/replication/libpqwalreceiver
 top_builddir = ../../../..
 include $(top_builddir)/src/Makefile.global
 
-override CPPFLAGS := -I$(srcdir) -I$(libpq_srcdir) $(CPPFLAGS)
+override CPPFLAGS := -I$(srcdir) -I$(libpq_srcdir) $(CPPFLAGS) -lerpc
 
 OBJS = libpqwalreceiver.o $(WIN32RES)
 SHLIB_LINK_INTERNAL = $(libpq)

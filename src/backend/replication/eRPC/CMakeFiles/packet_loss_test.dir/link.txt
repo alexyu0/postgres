@@ -1,0 +1,1 @@
+g++      CMakeFiles/packet_loss_test.dir/tests/client_tests/packet_loss_test.cc.o  -o build/packet_loss_test -rdynamic build/liberpc.a -Wl,-Bstatic -lgtest -Wl,-Bdynamic -lrt -lnuma -lpthread -lgflags -libverbs 

@@ -33,6 +33,8 @@
 #include "utils/pg_lsn.h"
 #include "utils/tuplestore.h"
 
+#include "nexus.h"
+
 PG_MODULE_MAGIC;
 
 void		_PG_init(void);
