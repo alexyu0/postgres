@@ -32,8 +32,7 @@
 #include "utils/memutils.h"
 #include "utils/pg_lsn.h"
 #include "utils/tuplestore.h"
-
-#include "nexus.h"
+#include "myclient.h"
 
 PG_MODULE_MAGIC;
 
@@ -108,6 +107,8 @@ static char *stringlist_to_identifierstr(PGconn *conn, List *strings);
 void
 _PG_init(void)
 {
+  //int a = 1;
+  test_init_client();
 	if (WalReceiverFunctions != NULL)
 		elog(ERROR, "libpqwalreceiver already loaded");
 	WalReceiverFunctions = &PQWalReceiverFunctions;
@@ -157,7 +158,7 @@ libpqrcv_connect(const char *conninfo, bool logical, const char *appname,
 
 	Assert(i < sizeof(keys));
 
-	conn = palloc0(sizeof(WalReceiverConn));
+	conn = (WalReceiverConn *)palloc0(sizeof(WalReceiverConn));
 	conn->streamConn = PQconnectStartParams(keys, vals,
 											 /* expand_dbname = */ true);
 	if (PQstatus(conn->streamConn) == CONNECTION_BAD)
@@ -551,7 +552,7 @@ libpqrcv_readtimelinehistoryfile(WalReceiverConn *conn,
 	*filename = pstrdup(PQgetvalue(res, 0, 0));
 
 	*len = PQgetlength(res, 0, 1);
-	*content = palloc(*len);
+	*content = (char *)palloc(*len);
 	memcpy(*content, PQgetvalue(res, 0, 1), *len);
 	PQclear(res);
 }
@@ -919,7 +920,7 @@ libpqrcv_exec(WalReceiverConn *conn, const char *query,
 			  const int nRetTypes, const Oid *retTypes)
 {
 	PGresult   *pgres = NULL;
-	WalRcvExecResult *walres = palloc0(sizeof(WalRcvExecResult));
+	WalRcvExecResult *walres = (WalRcvExecResult *)palloc0(sizeof(WalRcvExecResult));
 
 	if (MyDatabaseId == InvalidOid)
 		ereport(ERROR,

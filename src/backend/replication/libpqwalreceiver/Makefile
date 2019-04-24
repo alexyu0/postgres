@@ -12,9 +12,19 @@ subdir = src/backend/replication/libpqwalreceiver
 top_builddir = ../../../..
 include $(top_builddir)/src/Makefile.global
 
-override CPPFLAGS := -I$(srcdir) -I$(libpq_srcdir) $(CPPFLAGS) -lerpc
-
+# CUSTOM FOR EPRC
+override CPPFLAGS := -I$(srcdir) -I$(libpq_srcdir) \
+	-I/users/alexyu0/eRPC/test_hello_world \
+	-I/users/alexyu0/eRPC/src \
+	$(CPPFLAGS)
 OBJS = libpqwalreceiver.o $(WIN32RES)
+LDFLAGS_SL += -lerpclient -lerpc -lpthread -lnuma -ldl -libverbs
+override CC = $(CXX)
+override CFLAGS = -Wall -std=c++11
+
+#override CPPFLAGS := -I$(srcdir) -I$(libpq_srcdir) $(CPPFLAGS) -lerpc
+#OBJS = libpqwalreceiver.o $(WIN32RES)
+
 SHLIB_LINK_INTERNAL = $(libpq)
 SHLIB_LINK = $(filter -lintl, $(LIBS))
 SHLIB_PREREQS = submake-libpq
