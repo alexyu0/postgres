@@ -14,6 +14,10 @@
  *
  *-------------------------------------------------------------------------
  */
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "postgres.h"
 
 #include <unistd.h>
@@ -107,8 +111,7 @@ static char *stringlist_to_identifierstr(PGconn *conn, List *strings);
 void
 _PG_init(void)
 {
-  //int a = 1;
-  test_init_client();
+  init_client();
 	if (WalReceiverFunctions != NULL)
 		elog(ERROR, "libpqwalreceiver already loaded");
 	WalReceiverFunctions = &PQWalReceiverFunctions;
@@ -371,7 +374,7 @@ libpqrcv_startstreaming(WalReceiverConn *conn,
 	Assert(options->logical == conn->logical);
 	Assert(options->slotname || !options->logical);
 
-	initStringInfo(&cmd);
+	//initStringInfo(&cmd);
 
 	/* Build the command. */
 	appendStringInfoString(&cmd, "START_REPLICATION");
@@ -790,7 +793,7 @@ libpqrcv_create_slot(WalReceiverConn *conn, const char *slotname,
 	StringInfoData cmd;
 	char	   *snapshot;
 
-	initStringInfo(&cmd);
+	//initStringInfo(&cmd);
 
 	appendStringInfo(&cmd, "CREATE_REPLICATION_SLOT \"%s\"", slotname);
 
@@ -825,8 +828,10 @@ libpqrcv_create_slot(WalReceiverConn *conn, const char *slotname,
 						slotname, pchomp(PQerrorMessage(conn->streamConn)))));
 	}
 
-	*lsn = DatumGetLSN(DirectFunctionCall1Coll(pg_lsn_in, InvalidOid,
+  /*
+  *lsn = DatumGetLSN(DirectFunctionCall1Coll(pg_lsn_in, InvalidOid,
 											   CStringGetDatum(PQgetvalue(res, 0, 1))));
+  */
 	if (!PQgetisnull(res, 0, 2))
 		snapshot = pstrdup(PQgetvalue(res, 0, 2));
 	else
@@ -987,7 +992,7 @@ stringlist_to_identifierstr(PGconn *conn, List *strings)
 	StringInfoData res;
 	bool		first = true;
 
-	initStringInfo(&res);
+	//initStringInfo(&res);
 
 	foreach(lc, strings)
 	{
@@ -1011,3 +1016,7 @@ stringlist_to_identifierstr(PGconn *conn, List *strings)
 
 	return res.data;
 }
+
+#ifdef __cplusplus
+}
+#endif

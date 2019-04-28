@@ -18,12 +18,13 @@ override CPPFLAGS := -I$(srcdir) -I$(libpq_srcdir) \
 	-I/users/alexyu0/eRPC/src \
 	$(CPPFLAGS)
 OBJS = libpqwalreceiver.o $(WIN32RES)
-LDFLAGS_SL += -lerpclient -lerpc -lpthread -lnuma -ldl -libverbs
+LDFLAGS_SL += -lclient -lerpc -lpthread -lnuma -ldl -libverbs
 override CC = $(CXX)
-override CFLAGS = -Wall -std=c++11
+override CFLAGS = -std=c++11 -Wall -Wmissing-prototypes -Wpointer-arith \
+	-Wdeclaration-after-statement -Werror=vla -Wendif-labels \
+	-Wmissing-format-attribute -Wformat-security -Wno-format-truncation \
+	-fno-strict-aliasing -fwrapv -O2
 
-#override CPPFLAGS := -I$(srcdir) -I$(libpq_srcdir) $(CPPFLAGS) -lerpc
-#OBJS = libpqwalreceiver.o $(WIN32RES)
 
 SHLIB_LINK_INTERNAL = $(libpq)
 SHLIB_LINK = $(filter -lintl, $(LIBS))
