@@ -44,6 +44,10 @@
  *
  *-------------------------------------------------------------------------
  */
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "postgres.h"
 
 #include <signal.h>
@@ -92,6 +96,7 @@
 #include "utils/ps_status.h"
 #include "utils/timeout.h"
 #include "utils/timestamp.h"
+#include "myclient.h"
 
 /*
  * Maximum data payload in a WAL data message.  Must be >= XLOG_BLCKSZ.
@@ -122,6 +127,9 @@ int			max_wal_senders = 0;	/* the maximum number of concurrent
 int			wal_sender_timeout = 60 * 1000; /* maximum time to send one WAL
 											 * data message */
 bool		log_replication_commands = false;
+
+// declare eRPC client as NULL at first
+erpc_client_t erpc_client_blob = (void *)NULL;
 
 /*
  * State for WalSndWakeupRequest
@@ -552,6 +560,9 @@ StartReplication(StartReplicationCmd *cmd)
 	 * written at wal_level='minimal'.
 	 */
 
+  // init eRPC client
+  erpc_client_t erpc_client_blob = init_client();
+
 	if (cmd->slotname)
 	{
 		ReplicationSlotAcquire(cmd->slotname, true);
@@ -745,6 +756,9 @@ StartReplication(StartReplicationCmd *cmd)
 
 		end_tup_output(tstate);
 	}
+
+  // delete eRPC client
+  delete_client(erpc_client_blob);
 
 	/* Send CommandComplete message */
 	pq_puttextmessage('C', "START_STREAMING");
@@ -2683,7 +2697,12 @@ XLogSendPhysical(void)
 		sendFile = -1;
 
 		/* Send CopyDone */
-		pq_putmessage_noblock('c', NULL, 0);
+    if (erpc_client_blob != (void *)NULL)
+      pq_putmessage_noblock('c', NULL, 0);
+    else {
+      // send using eRPC
+      set_message(erpc_client_blob, NULL, 0);
+    }
 		streamingDoneSending = true;
 
 		WalSndCaughtUp = true;
@@ -2763,7 +2782,12 @@ XLogSendPhysical(void)
 	memcpy(&output_message.data[1 + sizeof(int64) + sizeof(int64)],
 		   tmpbuf.data, sizeof(int64));
 
-	pq_putmessage_noblock('d', output_message.data, output_message.len);
+  if (erpc_client_blob != (void *)NULL)
+    pq_putmessage_noblock('d', output_message.data, output_message.len);
+  else {
+    // send using eRPC
+    set_message(erpc_client_blob, output_message.data, output_message.len);
+  }
 
 	sentPtr = endptr;
 
@@ -3605,3 +3629,7 @@ LagTrackerRead(int head, XLogRecPtr lsn, TimestampTz now)
 	Assert(time != 0);
 	return now - time;
 }
+
+#ifdef __cplusplus
+}
+#endif

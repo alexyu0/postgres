@@ -36,7 +36,7 @@ extern "C" {
 #include "utils/memutils.h"
 #include "utils/pg_lsn.h"
 #include "utils/tuplestore.h"
-#include "myclient.h"
+
 
 PG_MODULE_MAGIC;
 
@@ -111,7 +111,6 @@ static char *stringlist_to_identifierstr(PGconn *conn, List *strings);
 void
 _PG_init(void)
 {
-  init_client();
 	if (WalReceiverFunctions != NULL)
 		elog(ERROR, "libpqwalreceiver already loaded");
 	WalReceiverFunctions = &PQWalReceiverFunctions;

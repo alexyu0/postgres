@@ -41,6 +41,10 @@
  *
  *-------------------------------------------------------------------------
  */
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "postgres.h"
 
 #include <signal.h>
@@ -69,6 +73,7 @@
 #include "utils/ps_status.h"
 #include "utils/resowner.h"
 #include "utils/timestamp.h"
+#include "myserver.h"
 
 
 /* GUC variables */
@@ -392,7 +397,7 @@ WalReceiverMain(void)
 		ThisTimeLineID = startpointTLI;
 		if (walrcv_startstreaming(wrconn, &options))
 		{
-			if (first_stream)
+      if (first_stream)
 				ereport(LOG,
 						(errmsg("started streaming WAL from primary at %X/%X on timeline %u",
 								(uint32) (startpoint >> 32), (uint32) startpoint,
@@ -413,6 +418,11 @@ WalReceiverMain(void)
 			last_recv_timestamp = GetCurrentTimestamp();
 			ping_sent = false;
 
+			// init eRPC server
+      //erpc_server_t erpc_server_blob = (void *)NULL;
+      erpc_server_t erpc_server_blob = init_server();
+      run_event_loop(erpc_server_blob, EVENT_LOOP_DURATION);
+      
 			/* Loop until end-of-streaming or error */
 			for (;;)
 			{
@@ -441,7 +451,12 @@ WalReceiverMain(void)
 				}
 
 				/* See if we can read data immediately */
-				len = walrcv_receive(wrconn, &buf, &wait_fd);
+        if (erpc_server_blob == (void *)NULL)
+          len = walrcv_receive(wrconn, &buf, &wait_fd);
+        else {
+          // receive using eRPC
+          len = get_message(&buf);
+        }
 				if (len != 0)
 				{
 					/*
@@ -472,8 +487,12 @@ WalReceiverMain(void)
 							endofwal = true;
 							break;
 						}
-						len = walrcv_receive(wrconn, &buf, &wait_fd);
-					}
+						if (erpc_server_blob == (void *)NULL)
+              len = walrcv_receive(wrconn, &buf, &wait_fd);
+            else {
+              // receive using eRPC
+              len = get_message(&buf);
+            }
 
 					/* Let the master know that we received some data. */
 					XLogWalRcvSendReply(false, false);
@@ -581,6 +600,10 @@ WalReceiverMain(void)
 			 */
 			EnableWalRcvImmediateExit();
 			walrcv_endstreaming(wrconn, &primaryTLI);
+      if (erpc_server_blob != (void *)NULL) {
+        // destroy eRPC server
+        delete_server(erpc_server_blob);
+      }
 			DisableWalRcvImmediateExit();
 
 			/*
@@ -1485,3 +1508,7 @@ pg_stat_get_wal_receiver(PG_FUNCTION_ARGS)
 	/* Returns the record as Datum */
 	PG_RETURN_DATUM(HeapTupleGetDatum(heap_form_tuple(tupdesc, values, nulls)));
 }
+
+#ifdef __cplusplus
+}
+#endif

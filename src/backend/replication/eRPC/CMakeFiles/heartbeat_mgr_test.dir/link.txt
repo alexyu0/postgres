@@ -1,1 +1,0 @@
-g++      CMakeFiles/heartbeat_mgr_test.dir/tests/util_tests/heartbeat_mgr_test.cc.o  -o build/heartbeat_mgr_test -rdynamic build/liberpc.a -Wl,-Bstatic -lgtest -Wl,-Bdynamic -lrt -lnuma -lpthread -lgflags -libverbs 

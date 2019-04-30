@@ -1,1 +1,0 @@
-g++      CMakeFiles/large_msg_test.dir/tests/client_tests/large_msg_test.cc.o  -o build/large_msg_test -rdynamic build/liberpc.a -Wl,-Bstatic -lgtest -Wl,-Bdynamic -lrt -lnuma -lpthread -lgflags -libverbs 

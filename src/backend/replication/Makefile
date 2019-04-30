@@ -12,10 +12,19 @@ subdir = src/backend/replication
 top_builddir = ../../..
 include $(top_builddir)/src/Makefile.global
 
-override CPPFLAGS := -I. -I$(srcdir) $(CPPFLAGS)
+override CPPFLAGS := -I. -I$(srcdir) \
+	-I/users/alexyu0/eRPC/test_hello_world \
+	$(CPPFLAGS)
 
 OBJS = walsender.o walreceiverfuncs.o walreceiver.o basebackup.o \
 	repl_gram.o slot.o slotfuncs.o syncrep.o syncrep_gram.o
+
+LDFLAGS_SL += -lclient -lserver -lerpc -lpthread -lnuma -ldl -libverbs
+override CC = $(CXX)
+override CFLAGS = -std=c++11 -Wall -Wmissing-prototypes -Wpointer-arith \
+	-Wdeclaration-after-statement -Werror=vla -Wendif-labels \
+	-Wmissing-format-attribute -Wformat-security -Wno-format-truncation \
+	-fno-strict-aliasing -fwrapv -O2
 
 SUBDIRS = logical
 

@@ -1,1 +1,0 @@
-g++      CMakeFiles/rpc_resp_test.dir/tests/protocol_tests/rpc_resp_test.cc.o  -o build/rpc_resp_test -rdynamic build/liberpc.a -Wl,-Bstatic -lgtest -Wl,-Bdynamic -lrt -lnuma -lpthread -lgflags -libverbs 
