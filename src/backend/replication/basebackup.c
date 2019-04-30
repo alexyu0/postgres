@@ -10,6 +10,10 @@
  *
  *-------------------------------------------------------------------------
  */
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "postgres.h"
 
 #include <sys/stat.h>
@@ -274,7 +278,7 @@ perform_base_backup(basebackup_options *opt)
 			statrelpath = pgstat_stat_directory;
 
 		/* Add a node for the base directory at the end */
-		ti = palloc0(sizeof(tablespaceinfo));
+		ti = (tablespaceinfo *)palloc0(sizeof(tablespaceinfo));
 		ti->size = opt->progress ? sendDir(".", 1, true, tablespaces, true) : -1;
 		tablespaces = lappend(tablespaces, ti);
 
@@ -433,11 +437,11 @@ perform_base_backup(basebackup_options *opt)
 		 * recycled before we get a chance to send it over.
 		 */
 		nWalFiles = list_length(walFileList);
-		walFiles = palloc(nWalFiles * sizeof(char *));
+		walFiles = (char **)palloc(nWalFiles * sizeof(char *));
 		i = 0;
 		foreach(lc, walFileList)
 		{
-			walFiles[i++] = lfirst(lc);
+			walFiles[i++] = (char *)lfirst(lc);
 		}
 		qsort(walFiles, nWalFiles, sizeof(char *), compareWalFileNames);
 
@@ -583,7 +587,7 @@ perform_base_backup(basebackup_options *opt)
 		 */
 		foreach(lc, historyFileList)
 		{
-			char	   *fname = lfirst(lc);
+			char	   *fname = (char *)lfirst(lc);
 
 			snprintf(pathbuf, MAXPGPATH, XLOGDIR "/%s", fname);
 
@@ -825,7 +829,7 @@ SendBackupHeader(List *tablespaces)
 
 	foreach(lc, tablespaces)
 	{
-		tablespaceinfo *ti = lfirst(lc);
+		tablespaceinfo *ti = (tablespaceinfo *)lfirst(lc);
 
 		/* Send one datarow message */
 		pq_beginmessage(&buf, 'D');
@@ -1717,3 +1721,7 @@ throttle(size_t increment)
 	 */
 	throttled_last = GetCurrentTimestamp();
 }
+
+#ifdef __cplusplus
+}
+#endif

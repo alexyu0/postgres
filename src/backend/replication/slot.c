@@ -34,6 +34,10 @@
  *-------------------------------------------------------------------------
  */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "postgres.h"
 
 #include <unistd.h>
@@ -1567,3 +1571,7 @@ RestoreSlotFromDisk(const char *name)
 				(errmsg("too many replication slots active before shutdown"),
 				 errhint("Increase max_replication_slots and try again.")));
 }
+
+#ifdef __cplusplus
+}
+#endif

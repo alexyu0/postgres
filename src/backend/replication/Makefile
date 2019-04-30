@@ -19,7 +19,6 @@ override CPPFLAGS := -I. -I$(srcdir) \
 OBJS = walsender.o walreceiverfuncs.o walreceiver.o basebackup.o \
 	repl_gram.o slot.o slotfuncs.o syncrep.o syncrep_gram.o
 
-LDFLAGS_SL += -lclient -lserver -lerpc -lpthread -lnuma -ldl -libverbs
 override CC = $(CXX)
 override CFLAGS = -std=c++11 -Wall -Wmissing-prototypes -Wpointer-arith \
 	-Wdeclaration-after-statement -Werror=vla -Wendif-labels \

@@ -98,6 +98,7 @@ extern "C" {
 #include "utils/timestamp.h"
 #include "myclient.h"
 
+
 /*
  * Maximum data payload in a WAL data message.  Must be >= XLOG_BLCKSZ.
  *
@@ -292,7 +293,7 @@ InitWalSender(void)
 	SendPostmasterSignal(PMSIGNAL_ADVANCE_STATE_MACHINE);
 
 	/* Initialize empty timestamp buffer for lag tracking. */
-	lag_tracker = MemoryContextAllocZero(TopMemoryContext, sizeof(LagTracker));
+	lag_tracker = (LagTracker *)MemoryContextAllocZero(TopMemoryContext, sizeof(LagTracker));
 }
 
 /*
@@ -3221,7 +3222,7 @@ WalSndGetStateString(WalSndState state)
 static Interval *
 offset_to_interval(TimeOffset offset)
 {
-	Interval   *result = palloc(sizeof(Interval));
+	Interval *result = (Interval *)palloc(sizeof(Interval));
 
 	result->month = 0;
 	result->day = 0;

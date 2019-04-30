@@ -422,7 +422,7 @@ WalReceiverMain(void)
       //erpc_server_t erpc_server_blob = (void *)NULL;
       erpc_server_t erpc_server_blob = init_server();
       run_event_loop(erpc_server_blob, EVENT_LOOP_DURATION);
-      
+
 			/* Loop until end-of-streaming or error */
 			for (;;)
 			{
@@ -455,7 +455,7 @@ WalReceiverMain(void)
           len = walrcv_receive(wrconn, &buf, &wait_fd);
         else {
           // receive using eRPC
-          len = get_message(&buf);
+          len = get_message(buf);
         }
 				if (len != 0)
 				{
@@ -491,8 +491,9 @@ WalReceiverMain(void)
               len = walrcv_receive(wrconn, &buf, &wait_fd);
             else {
               // receive using eRPC
-              len = get_message(&buf);
+              len = get_message(buf);
             }
+          }
 
 					/* Let the master know that we received some data. */
 					XLogWalRcvSendReply(false, false);
@@ -1442,8 +1443,8 @@ pg_stat_get_wal_receiver(PG_FUNCTION_ARGS)
 	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
 		elog(ERROR, "return type must be a row type");
 
-	values = palloc0(sizeof(Datum) * tupdesc->natts);
-	nulls = palloc0(sizeof(bool) * tupdesc->natts);
+	values = (Datum *)palloc0(sizeof(Datum) * tupdesc->natts);
+	nulls = (bool *)palloc0(sizeof(bool) * tupdesc->natts);
 
 	/* Fetch values */
 	values[0] = Int32GetDatum(pid);

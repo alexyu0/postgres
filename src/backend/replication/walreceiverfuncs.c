@@ -14,6 +14,10 @@
  *
  *-------------------------------------------------------------------------
  */
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "postgres.h"
 
 #include <sys/stat.h>
@@ -376,3 +380,7 @@ GetReplicationTransferLatency(void)
 
 	return ms;
 }
+
+#ifdef __cplusplus
+}
+#endif

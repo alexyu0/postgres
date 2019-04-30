@@ -70,6 +70,11 @@
  *
  *-------------------------------------------------------------------------
  */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "postgres.h"
 
 #include <unistd.h>
@@ -1222,3 +1227,7 @@ assign_synchronous_commit(int newval, void *extra)
 			break;
 	}
 }
+
+#ifdef __cplusplus
+}
+#endif

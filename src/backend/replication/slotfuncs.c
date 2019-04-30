@@ -11,6 +11,10 @@
  *-------------------------------------------------------------------------
  */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "postgres.h"
 
 #include "funcapi.h"
@@ -558,3 +562,7 @@ pg_replication_slot_advance(PG_FUNCTION_ARGS)
 
 	PG_RETURN_DATUM(result);
 }
+
+#ifdef __cplusplus
+}
+#endif
