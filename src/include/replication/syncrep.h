@@ -10,6 +10,10 @@
  *
  *-------------------------------------------------------------------------
  */
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef _SYNCREP_H
 #define _SYNCREP_H
 
@@ -95,3 +99,7 @@ extern void syncrep_scanner_init(const char *query_string);
 extern void syncrep_scanner_finish(void);
 
 #endif							/* _SYNCREP_H */
+
+#ifdef __cplusplus
+}
+#endif

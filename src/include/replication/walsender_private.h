@@ -9,6 +9,10 @@
  *
  *-------------------------------------------------------------------------
  */
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef _WALSENDER_PRIVATE_H
 #define _WALSENDER_PRIVATE_H
 
@@ -127,3 +131,7 @@ extern void replication_scanner_finish(void);
 extern Node *replication_parse_result;
 
 #endif							/* _WALSENDER_PRIVATE_H */
+
+#ifdef __cplusplus
+}
+#endif
