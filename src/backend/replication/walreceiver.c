@@ -421,7 +421,7 @@ WalReceiverMain(void)
 			// init eRPC server
       //erpc_server_t erpc_server_blob = (void *)NULL;
       erpc_server_t erpc_server_blob = init_server();
-      run_event_loop(erpc_server_blob, EVENT_LOOP_DURATION);
+      run_event_loop(erpc_server_blob, 1000000);
 
 			/* Loop until end-of-streaming or error */
 			for (;;)

@@ -13,7 +13,7 @@ top_builddir = ../../..
 include $(top_builddir)/src/Makefile.global
 
 override CPPFLAGS := -I. -I$(srcdir) \
-	-I/users/alexyu0/eRPC/test_hello_world \
+	-I/home/postgres/eRPC/src \
 	$(CPPFLAGS)
 
 OBJS = walsender.o walreceiverfuncs.o walreceiver.o basebackup.o \

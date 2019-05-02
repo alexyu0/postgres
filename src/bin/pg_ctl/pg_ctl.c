@@ -2304,7 +2304,7 @@ main(int argc, char **argv)
 	 * Disallow running as root, to forestall any possible security holes.
 	 */
 #ifndef WIN32
-	if (geteuid() == 0)
+	if (false)
 	{
 		write_stderr(_("%s: cannot be run as root\n"
 					   "Please log in (using, e.g., \"su\") as the "
