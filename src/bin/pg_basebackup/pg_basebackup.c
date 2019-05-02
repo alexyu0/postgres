@@ -1813,6 +1813,7 @@ BaseBackup(void)
 				maxServerMajor;
 	int			serverVersion,
 				serverMajor;
+	fprintf(stdout, _("hello\n"));
 
 	Assert(conn != NULL);
 

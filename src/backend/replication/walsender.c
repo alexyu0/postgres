@@ -546,6 +546,7 @@ StartReplication(StartReplicationCmd *cmd)
 {
 	StringInfoData buf;
 	XLogRecPtr	FlushPtr;
+	ereport(LOG, (errmsg("Starting replication")));
 
 	if (ThisTimeLineID == 0)
 		ereport(ERROR,
@@ -562,7 +563,9 @@ StartReplication(StartReplicationCmd *cmd)
 	 */
 
   // init eRPC client
+	ereport(LOG, (errmsg("Intializing erpc client")));
   erpc_client_t erpc_client_blob = init_client();
+	ereport(LOG, (errmsg("eRPC client intializaed")));
 
 	if (cmd->slotname)
 	{
