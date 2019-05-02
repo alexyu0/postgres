@@ -46,7 +46,9 @@ LIBS := $(filter-out -lpgport -lpgcommon, $(LIBS)) $(LDAP_LIBS_BE) $(ICU_LIBS)
 
 # The backend doesn't need everything that's in LIBS, however
 LIBS := $(filter-out -lz -lreadline -ledit -ltermcap -lncurses -lcurses, $(LIBS))
-ERPC_LIBS := -lclient -lserver -lerpc -lpthread -lnuma -ldl -libverbs
+ERPC_LIBS := -Wl,-rpath=/usr/local/lib -lclient -lserver -lerpc -lpthread -lnuma -ldl -libverbs
+CFLAGS := -I/home/postgres/eRPC/src $(CFLAGS)
+override CC = $(CXX)
 
 ifeq ($(with_systemd),yes)
 LIBS += -lsystemd

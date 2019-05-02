@@ -544,9 +544,11 @@ SendTimeLineHistory(TimeLineHistoryCmd *cmd)
 static void
 StartReplication(StartReplicationCmd *cmd)
 {
+  printf("%ld, %ld\n", (long)getpid(), (long)getppid());
+	printf("Starting replication!!!!!\n");
 	StringInfoData buf;
 	XLogRecPtr	FlushPtr;
-	ereport(LOG, (errmsg("Starting replication")));
+	printf("Starting replication 2\n");
 
 	if (ThisTimeLineID == 0)
 		ereport(ERROR,
@@ -563,9 +565,9 @@ StartReplication(StartReplicationCmd *cmd)
 	 */
 
   // init eRPC client
-	ereport(LOG, (errmsg("Intializing erpc client")));
+	printf("Initializing erpc client\n");
   erpc_client_t erpc_client_blob = init_client();
-	ereport(LOG, (errmsg("eRPC client intializaed")));
+	printf("eRPC client initialized\n");
 
 	if (cmd->slotname)
 	{

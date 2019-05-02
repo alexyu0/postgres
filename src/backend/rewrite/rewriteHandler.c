@@ -67,13 +67,14 @@ static List *rewriteTargetListIU(List *targetList,
 					CmdType commandType,
 					OverridingKind override,
 					Relation target_relation,
-					int result_rti);
+					int result_rti,
+					List **attrno_list);
 static TargetEntry *process_matched_tle(TargetEntry *src_tle,
 					TargetEntry *prior_tle,
 					const char *attrName);
 static Node *get_assignment_input(Node *node);
-static bool rewriteValuesRTE(Query *parsetree, RangeTblEntry *rte, int rti,
-				 Relation target_relation, bool force_nulls);
+static bool rewriteValuesRTE(Query *parsetree, RangeTblEntry *rte,
+				 Relation target_relation, List *attrnos, bool force_nulls);
 static void markQueryForLocking(Query *qry, Node *jtnode,
 					LockClauseStrength strength, LockWaitPolicy waitPolicy,
 					bool pushedDown);
@@ -704,6 +705,11 @@ adjustJoinTreeList(Query *parsetree, bool removert, int rt_index)
  * is not needed for rewriting, but will be needed by the planner, and we
  * can do it essentially for free while handling the other items.
  *
+ * If attrno_list isn't NULL, we return an additional output besides the
+ * rewritten targetlist: an integer list of the assigned-to attnums, in
+ * order of the original tlist's non-junk entries.  This is needed for
+ * processing VALUES RTEs.
+ *
  * Note that for an inheritable UPDATE, this processing is only done once,
  * using the parent relation as reference.  It must not do anything that
  * will not be correct when transposed to the child relation(s).  (Step 4
@@ -716,7 +722,8 @@ rewriteTargetListIU(List *targetList,
 					CmdType commandType,
 					OverridingKind override,
 					Relation target_relation,
-					int result_rti)
+					int result_rti,
+					List **attrno_list)
 {
 	TargetEntry **new_tles;
 	List	   *new_tlist = NIL;
@@ -726,6 +733,9 @@ rewriteTargetListIU(List *targetList,
 				next_junk_attrno,
 				numattrs;
 	ListCell   *temp;
+
+	if (attrno_list)			/* initialize optional result list */
+		*attrno_list = NIL;
 
 	/*
 	 * We process the normal (non-junk) attributes by scanning the input tlist
@@ -751,6 +761,10 @@ rewriteTargetListIU(List *targetList,
 			if (attrno < 1 || attrno > numattrs)
 				elog(ERROR, "bogus resno %d in targetlist", attrno);
 			att_tup = TupleDescAttr(target_relation->rd_att, attrno - 1);
+
+			/* put attrno into attrno_list even if it's dropped */
+			if (attrno_list)
+				*attrno_list = lappend_int(*attrno_list, attrno);
 
 			/* We can (and must) ignore deleted attributes */
 			if (att_tup->attisdropped)
@@ -1226,26 +1240,22 @@ searchForDefault(RangeTblEntry *rte)
  * an insert into an auto-updatable view, and the product queries are inserts
  * into a rule-updatable view.
  *
- * Note that we may have subscripted or field assignment targetlist entries,
- * as well as more complex expressions from already-replaced DEFAULT items if
- * we have recursed to here for an auto-updatable view. However, it ought to
- * be impossible for such entries to have DEFAULTs assigned to them --- we
- * should only have to replace DEFAULT items for targetlist entries that
- * contain simple Vars referencing the VALUES RTE.
+ * Note that we currently can't support subscripted or field assignment
+ * in the multi-VALUES case.  The targetlist will contain simple Vars
+ * referencing the VALUES RTE, and therefore process_matched_tle() will
+ * reject any such attempt with "multiple assignments to same column".
  *
  * Returns true if all DEFAULT items were replaced, and false if some were
  * left untouched.
  */
 static bool
-rewriteValuesRTE(Query *parsetree, RangeTblEntry *rte, int rti,
-				 Relation target_relation, bool force_nulls)
+rewriteValuesRTE(Query *parsetree, RangeTblEntry *rte,
+				 Relation target_relation, List *attrnos, bool force_nulls)
 {
 	List	   *newValues;
 	ListCell   *lc;
 	bool		isAutoUpdatableView;
 	bool		allReplaced;
-	int			numattrs;
-	int		   *attrnos;
 
 	/*
 	 * Rebuilding all the lists is a pretty expensive proposition in a big
@@ -1258,33 +1268,8 @@ rewriteValuesRTE(Query *parsetree, RangeTblEntry *rte, int rti,
 	if (!force_nulls && !searchForDefault(rte))
 		return true;			/* nothing to do */
 
-	/*
-	 * Scan the targetlist for entries referring to the VALUES RTE, and note
-	 * the target attributes. As noted above, we should only need to do this
-	 * for targetlist entries containing simple Vars --- nothing else in the
-	 * VALUES RTE should contain DEFAULT items, and we complain if such a
-	 * thing does occur.
-	 */
-	numattrs = list_length(linitial(rte->values_lists));
-	attrnos = (int *) palloc0(numattrs * sizeof(int));
-
-	foreach(lc, parsetree->targetList)
-	{
-		TargetEntry *tle = (TargetEntry *) lfirst(lc);
-
-		if (IsA(tle->expr, Var))
-		{
-			Var		   *var = (Var *) tle->expr;
-
-			if (var->varno == rti)
-			{
-				int			attrno = var->varattno;
-
-				Assert(attrno >= 1 && attrno <= numattrs);
-				attrnos[attrno - 1] = tle->resno;
-			}
-		}
-	}
+	/* Check list lengths (we can assume all the VALUES sublists are alike) */
+	Assert(list_length(attrnos) == list_length(linitial(rte->values_lists)));
 
 	/*
 	 * Check if the target relation is an auto-updatable view, in which case
@@ -1335,23 +1320,18 @@ rewriteValuesRTE(Query *parsetree, RangeTblEntry *rte, int rti,
 		List	   *sublist = (List *) lfirst(lc);
 		List	   *newList = NIL;
 		ListCell   *lc2;
-		int			i;
+		ListCell   *lc3;
 
-		Assert(list_length(sublist) == numattrs);
-
-		i = 0;
-		foreach(lc2, sublist)
+		forboth(lc2, sublist, lc3, attrnos)
 		{
 			Node	   *col = (Node *) lfirst(lc2);
-			int			attrno = attrnos[i++];
+			int			attrno = lfirst_int(lc3);
 
 			if (IsA(col, SetToDefault))
 			{
 				Form_pg_attribute att_tup;
 				Node	   *new_expr;
 
-				if (attrno == 0)
-					elog(ERROR, "cannot set value in column %d to DEFAULT", i);
 				att_tup = TupleDescAttr(target_relation->rd_att, attrno - 1);
 
 				if (!force_nulls && !att_tup->attisdropped)
@@ -1398,8 +1378,6 @@ rewriteValuesRTE(Query *parsetree, RangeTblEntry *rte, int rti,
 		newValues = lappend(newValues, newList);
 	}
 	rte->values_lists = newValues;
-
-	pfree(attrnos);
 
 	return allReplaced;
 }
@@ -3489,6 +3467,7 @@ RewriteQuery(Query *parsetree, List *rewrite_events)
 		List	   *locks;
 		List	   *product_queries;
 		bool		hasUpdate = false;
+		List	   *attrnos = NIL;
 		int			values_rte_index = 0;
 		bool		defaults_remaining = false;
 
@@ -3538,10 +3517,11 @@ RewriteQuery(Query *parsetree, List *rewrite_events)
 															parsetree->commandType,
 															parsetree->override,
 															rt_entry_relation,
-															parsetree->resultRelation);
+															parsetree->resultRelation,
+															&attrnos);
 				/* ... and the VALUES expression lists */
-				if (!rewriteValuesRTE(parsetree, values_rte, values_rte_index,
-									  rt_entry_relation, false))
+				if (!rewriteValuesRTE(parsetree, values_rte,
+									  rt_entry_relation, attrnos, false))
 					defaults_remaining = true;
 			}
 			else
@@ -3552,7 +3532,7 @@ RewriteQuery(Query *parsetree, List *rewrite_events)
 										parsetree->commandType,
 										parsetree->override,
 										rt_entry_relation,
-										parsetree->resultRelation);
+										parsetree->resultRelation, NULL);
 			}
 
 			if (parsetree->onConflict &&
@@ -3563,7 +3543,8 @@ RewriteQuery(Query *parsetree, List *rewrite_events)
 										CMD_UPDATE,
 										parsetree->override,
 										rt_entry_relation,
-										parsetree->resultRelation);
+										parsetree->resultRelation,
+										NULL);
 			}
 		}
 		else if (event == CMD_UPDATE)
@@ -3573,7 +3554,7 @@ RewriteQuery(Query *parsetree, List *rewrite_events)
 									parsetree->commandType,
 									parsetree->override,
 									rt_entry_relation,
-									parsetree->resultRelation);
+									parsetree->resultRelation, NULL);
 		}
 		else if (event == CMD_DELETE)
 		{
@@ -3618,8 +3599,7 @@ RewriteQuery(Query *parsetree, List *rewrite_events)
 				RangeTblEntry *values_rte = rt_fetch(values_rte_index,
 													 pt->rtable);
 
-				rewriteValuesRTE(pt, values_rte, values_rte_index,
-								 rt_entry_relation,
+				rewriteValuesRTE(pt, values_rte, rt_entry_relation, attrnos,
 								 true); /* Force remaining defaults to NULL */
 			}
 		}
