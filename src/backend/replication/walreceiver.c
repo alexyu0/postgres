@@ -420,9 +420,11 @@ WalReceiverMain(void)
 
 			// init eRPC server
       //erpc_server_t erpc_server_blob = (void *)NULL;
+      printf("Initializing server\n");
       erpc_server_t erpc_server_blob = init_server();
-      run_event_loop(erpc_server_blob, 1000000);
-
+      printf("Server intialized!\n");
+      run_event_loop(erpc_server_blob, 10000);
+      printf("Event loop ran\n");
 			/* Loop until end-of-streaming or error */
 			for (;;)
 			{
@@ -456,6 +458,7 @@ WalReceiverMain(void)
         else {
           // receive using eRPC
           len = get_message(buf);
+          printf("Received message from eRPC\n");
         }
 				if (len != 0)
 				{
