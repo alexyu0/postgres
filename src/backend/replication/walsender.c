@@ -2703,7 +2703,7 @@ XLogSendPhysical(void)
 		sendFile = -1;
 
 		/* Send CopyDone */
-    if (erpc_client_blob != (void *)NULL)
+    if (erpc_client_blob == (void *)NULL)
       pq_putmessage_noblock('c', NULL, 0);
     else {
       // send using eRPC
@@ -2788,7 +2788,7 @@ XLogSendPhysical(void)
 	memcpy(&output_message.data[1 + sizeof(int64) + sizeof(int64)],
 		   tmpbuf.data, sizeof(int64));
 
-  if (erpc_client_blob != (void *)NULL)
+  if (erpc_client_blob == (void *)NULL)
     pq_putmessage_noblock('d', output_message.data, output_message.len);
   else {
     // send using eRPC
