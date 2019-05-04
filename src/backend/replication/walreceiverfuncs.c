@@ -120,7 +120,7 @@ WalRcvRunning(void)
 bool
 WalRcvStreaming(void)
 {
-	WalRcvData *walrcv = WalRcv;
+  WalRcvData *walrcv = WalRcv;
 	WalRcvState state;
 	pg_time_t	startTime;
 
@@ -154,10 +154,12 @@ WalRcvStreaming(void)
 
 	if (state == WALRCV_STREAMING || state == WALRCV_STARTING ||
 		state == WALRCV_RESTARTING)
-		return true;
+   { 
+     return true; }
 	else
-		return false;
-}
+   {
+     return false;
+}}
 
 /*
  * Stop walreceiver (if running) and wait for it to die.

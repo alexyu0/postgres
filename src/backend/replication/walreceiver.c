@@ -208,6 +208,9 @@ WalReceiverMain(void)
 	char	   *sender_host = NULL;
 	int			sender_port = 0;
 
+  ereport(LOG, (errmsg("Entering WalReceiverMain!")));
+
+
 	/*
 	 * WalRcv should be set up already (if we are a backend, we inherit this
 	 * by fork() or EXEC_BACKEND mechanism from the postmaster).
@@ -395,8 +398,12 @@ WalReceiverMain(void)
 		options.slotname = slotname[0] != '\0' ? slotname : NULL;
 		options.proto.physical.startpointTLI = startpointTLI;
 		ThisTimeLineID = startpointTLI;
-		if (walrcv_startstreaming(wrconn, &options))
+    ereport(LOG, (errmsg("STARTING STREAMING\n")));
+		bool wrcvstatus = walrcv_startstreaming(wrconn, &options);
+    ereport(LOG, (errmsg("STARTING STREAMING does not segfault\n")));
+    if (wrcvstatus)
 		{
+      ereport(LOG, (errmsg("STREAMING STARTED\n")));
       if (first_stream)
 				ereport(LOG,
 						(errmsg("started streaming WAL from primary at %X/%X on timeline %u",
@@ -419,12 +426,17 @@ WalReceiverMain(void)
 			ping_sent = false;
 
 			// init eRPC server
-      //erpc_server_t erpc_server_blob = (void *)NULL;
-      printf("Initializing server\n");
-      erpc_server_t erpc_server_blob = init_server();
-      printf("Server intialized!\n");
-      run_event_loop(erpc_server_blob, 10000);
-      printf("Event loop ran\n");
+      bool USE_ERPC = true;
+      erpc_server_t erpc_server_blob;
+      if (USE_ERPC) {
+        ereport(LOG, (errmsg("Initializing erpc server\n")));
+        erpc_server_blob = init_server();
+        ereport(LOG, (errmsg("Server initialized\n")));
+        //run_event_loop(erpc_server_blob, 10000);
+        //printf("Event loop ran\n");
+      } else {
+        ereport(LOG, (errmsg("Not using eRPC!")));
+      }
 			/* Loop until end-of-streaming or error */
 			for (;;)
 			{
@@ -453,12 +465,12 @@ WalReceiverMain(void)
 				}
 
 				/* See if we can read data immediately */
-        if (erpc_server_blob == (void *)NULL)
+        if (!USE_ERPC | erpc_server_blob == (void *)NULL)
           len = walrcv_receive(wrconn, &buf, &wait_fd);
         else {
           // receive using eRPC
           len = get_message(buf);
-          printf("Received message from eRPC\n");
+          printf("Received message from eRPC of len %d\n", len);
         }
 				if (len != 0)
 				{

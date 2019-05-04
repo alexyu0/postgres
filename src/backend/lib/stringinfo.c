@@ -270,7 +270,7 @@ void
 enlargeStringInfo(StringInfo str, int needed)
 {
 	int			newlen;
-
+  //ereport(LOG, (errmsg("Entered enlargeStringInfo")));
 	/*
 	 * Guard against out-of-range "needed" values.  Without this, we can get
 	 * an overflow or infinite loop in the following.
@@ -308,7 +308,11 @@ enlargeStringInfo(StringInfo str, int needed)
 	if (newlen > (int) MaxAllocSize)
 		newlen = (int) MaxAllocSize;
 
+  //ereport(LOG, (errmsg(str == NULL ? "Str is NULL" : "Str is NOT Null")));
+  //ereport(LOG, (errmsg(str->data == NULL ? "Str->data is NULL" : "Str->data is NOT Null")));
+  //ereport(LOG, (errmsg("NewLen: %d", newlen)));
 	str->data = (char *) repalloc(str->data, newlen);
+  //ereport(LOG, (errmsg("Repalloc worked")));
 
 	str->maxlen = newlen;
 }

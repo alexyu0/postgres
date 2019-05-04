@@ -2703,7 +2703,7 @@ XLogSendPhysical(void)
 		sendFile = -1;
 
 		/* Send CopyDone */
-    if (erpc_client_blob != (void *)NULL)
+    if (erpc_client_blob == (void *)NULL)
       pq_putmessage_noblock('c', NULL, 0);
     else {
       // send using eRPC

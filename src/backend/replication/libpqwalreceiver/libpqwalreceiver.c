@@ -373,10 +373,13 @@ libpqrcv_startstreaming(WalReceiverConn *conn,
 	Assert(options->logical == conn->logical);
 	Assert(options->slotname || !options->logical);
 
-	//initStringInfo(&cmd);
+	initStringInfo(&cmd);
 
 	/* Build the command. */
-	appendStringInfoString(&cmd, "START_REPLICATION");
+  ereport(LOG, (errmsg("before appendStringInfoStringcmd, START_REPLICATION\n")));
+  appendStringInfoString(&cmd, "START_REPLICATION");
+  ereport(LOG, (errmsg("after appendStringInfoStringcmd, START_REPLICATION\n")));
+
 	if (options->slotname != NULL)
 		appendStringInfo(&cmd, " SLOT \"%s\"",
 						 options->slotname);
