@@ -2793,6 +2793,7 @@ XLogSendPhysical(void)
     pq_putmessage_noblock('d', output_message.data, output_message.len);
   else {
     // send using eRPC
+    printf("Sending eRPC message of len: %d\n", output_message.len);
     set_message(erpc_client_blob, output_message.data, output_message.len);
   }
 
