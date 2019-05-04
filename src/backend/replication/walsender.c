@@ -2707,6 +2707,7 @@ XLogSendPhysical(void)
       pq_putmessage_noblock('c', NULL, 0);
     else {
       // send using eRPC
+      printf("Sending message with eRPC\n");
       set_message(erpc_client_blob, NULL, 0);
     }
 		streamingDoneSending = true;
