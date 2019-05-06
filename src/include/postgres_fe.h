@@ -15,6 +15,10 @@
  *
  *-------------------------------------------------------------------------
  */
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef POSTGRES_FE_H
 #define POSTGRES_FE_H
 
@@ -27,3 +31,7 @@
 #include "common/fe_memutils.h"
 
 #endif							/* POSTGRES_FE_H */
+
+#ifdef __cplusplus
+}
+#endif

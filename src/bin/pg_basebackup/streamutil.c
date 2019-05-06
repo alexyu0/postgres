@@ -11,6 +11,9 @@
  *		  src/bin/pg_basebackup/streamutil.c
  *-------------------------------------------------------------------------
  */
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #include "postgres_fe.h"
 
@@ -101,8 +104,8 @@ GetConnection(void)
 				argcount++;
 		}
 
-		keywords = pg_malloc0((argcount + 1) * sizeof(*keywords));
-		values = pg_malloc0((argcount + 1) * sizeof(*values));
+		keywords = (const char**)pg_malloc0((argcount + 1) * sizeof(*keywords));
+		values = (const char**)pg_malloc0((argcount + 1) * sizeof(*values));
 
 		for (conn_opt = conn_opts; conn_opt->keyword != NULL; conn_opt++)
 		{
@@ -117,8 +120,8 @@ GetConnection(void)
 	}
 	else
 	{
-		keywords = pg_malloc0((argcount + 1) * sizeof(*keywords));
-		values = pg_malloc0((argcount + 1) * sizeof(*values));
+		keywords = (const char**)pg_malloc0((argcount + 1) * sizeof(*keywords));
+		values = (const char**)pg_malloc0((argcount + 1) * sizeof(*values));
 	}
 
 	keywords[i] = "dbname";
@@ -691,3 +694,7 @@ fe_recvint64(char *buf)
 
 	return pg_ntoh64(n64);
 }
+
+#ifdef __cplusplus
+}
+#endif

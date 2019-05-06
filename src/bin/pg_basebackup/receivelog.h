@@ -12,6 +12,8 @@
 #ifndef RECEIVELOG_H
 #define RECEIVELOG_H
 
+
+#include "myserver.h"
 #include "libpq-fe.h"
 #include "walmethods.h"
 
@@ -53,6 +55,6 @@ typedef struct StreamCtl
 
 extern bool CheckServerVersionForStreaming(PGconn *conn);
 extern bool ReceiveXlogStream(PGconn *conn,
-				  StreamCtl *stream);
+				  StreamCtl *stream, erpc_server_t server);
 
 #endif							/* RECEIVELOG_H */

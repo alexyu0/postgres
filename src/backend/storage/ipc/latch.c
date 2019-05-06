@@ -379,29 +379,33 @@ WaitLatchOrSocket(volatile Latch *latch, int wakeEvents, pgsocket sock,
 	else
 		timeout = -1;
 
-	if (wakeEvents & WL_LATCH_SET)
+	if (wakeEvents & WL_LATCH_SET) {
+    //elog(LOG, "first\n");
 		AddWaitEventToSet(set, WL_LATCH_SET, PGINVALID_SOCKET,
-						  (Latch *) latch, NULL);
+						  (Latch *) latch, NULL);}
 
 	/* Postmaster-managed callers must handle postmaster death somehow. */
 	Assert(!IsUnderPostmaster ||
 		   (wakeEvents & WL_EXIT_ON_PM_DEATH) ||
 		   (wakeEvents & WL_POSTMASTER_DEATH));
 
-	if ((wakeEvents & WL_POSTMASTER_DEATH) && IsUnderPostmaster)
-		AddWaitEventToSet(set, WL_POSTMASTER_DEATH, PGINVALID_SOCKET,
-						  NULL, NULL);
+	if ((wakeEvents & WL_POSTMASTER_DEATH) && IsUnderPostmaster) {
+    //elog(LOG, "second\n");
+    AddWaitEventToSet(set, WL_POSTMASTER_DEATH, PGINVALID_SOCKET,
+						  NULL, NULL);}
 
-	if ((wakeEvents & WL_EXIT_ON_PM_DEATH) && IsUnderPostmaster)
-		AddWaitEventToSet(set, WL_EXIT_ON_PM_DEATH, PGINVALID_SOCKET,
-						  NULL, NULL);
+	if ((wakeEvents & WL_EXIT_ON_PM_DEATH) && IsUnderPostmaster) {
+		//elog(LOG, "third\n");
+    AddWaitEventToSet(set, WL_EXIT_ON_PM_DEATH, PGINVALID_SOCKET,
+						  NULL, NULL);}
 
 	if (wakeEvents & WL_SOCKET_MASK)
 	{
 		int			ev;
 
 		ev = wakeEvents & WL_SOCKET_MASK;
-		AddWaitEventToSet(set, ev, sock, NULL, NULL);
+		elog(LOG, "inside\n");
+    AddWaitEventToSet(set, ev, sock, NULL, NULL);
 	}
 
 	rc = WaitEventSetWait(set, timeout, &event, 1, wait_event_info);
@@ -717,8 +721,13 @@ AddWaitEventToSet(WaitEventSet *set, uint32 events, pgsocket fd, Latch *latch,
 	}
 
 	/* waiting for socket readiness without a socket indicates a bug */
-	if (fd == PGINVALID_SOCKET && (events & WL_SOCKET_MASK))
-		elog(ERROR, "cannot wait on socket event without a socket");
+	if (fd == PGINVALID_SOCKET && (events & WL_SOCKET_MASK)) {
+    if (fd == PGINVALID_SOCKET) {
+      elog(LOG, "fd == PGINVALID_SOCKET\n");
+    }
+    elog(ERROR, "cannot wait on socket hello world event without a socket");
+  }
+
 
 	event = &set->events[set->nevents];
 	event->pos = set->nevents++;

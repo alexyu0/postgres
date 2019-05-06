@@ -11,6 +11,9 @@
  *		  src/bin/pg_basebackup/walmethods.c
  *-------------------------------------------------------------------------
  */
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #include "postgres_fe.h"
 
@@ -168,7 +171,7 @@ dir_open_for_write(const char *pathname, const char *temp_suffix, size_t pad_to_
 		}
 	}
 
-	f = pg_malloc0(sizeof(DirectoryMethodFile));
+	f = (DirectoryMethodFile*)pg_malloc0(sizeof(DirectoryMethodFile));
 #ifdef HAVE_LIBZ
 	if (dir_data->compression > 0)
 		f->gzfp = gzfp;
@@ -351,7 +354,7 @@ CreateWalDirectoryMethod(const char *basedir, int compression, bool sync)
 {
 	WalWriteMethod *method;
 
-	method = pg_malloc0(sizeof(WalWriteMethod));
+	method = (WalWriteMethod*)pg_malloc0(sizeof(WalWriteMethod));
 	method->open_for_write = dir_open_for_write;
 	method->write = dir_write;
 	method->get_current_pos = dir_get_current_pos;
@@ -362,7 +365,7 @@ CreateWalDirectoryMethod(const char *basedir, int compression, bool sync)
 	method->finish = dir_finish;
 	method->getlasterror = dir_getlasterror;
 
-	dir_data = pg_malloc0(sizeof(DirectoryMethodData));
+	dir_data = (DirectoryMethodData*)pg_malloc0(sizeof(DirectoryMethodData));
 	dir_data->compression = compression;
 	dir_data->basedir = pg_strdup(basedir);
 	dir_data->sync = sync;
@@ -426,7 +429,7 @@ tar_getlasterror(void)
 static bool
 tar_write_compressed_data(void *buf, size_t count, bool flush)
 {
-	tar_data->zp->next_in = buf;
+	tar_data->zp->next_in = (Bytef*)buf;
 	tar_data->zp->avail_in = count;
 
 	while (tar_data->zp->avail_in || flush)
@@ -455,7 +458,7 @@ tar_write_compressed_data(void *buf, size_t count, bool flush)
 				return false;
 			}
 
-			tar_data->zp->next_out = tar_data->zlibOut;
+			tar_data->zp->next_out = (Bytef*)tar_data->zlibOut;
 			tar_data->zp->avail_out = ZLIB_OUT_SIZE;
 		}
 
@@ -496,7 +499,7 @@ tar_write(Walfile f, const void *buf, size_t count)
 #ifdef HAVE_LIBZ
 	else
 	{
-		if (!tar_write_compressed_data(unconstify(void *, buf), count, false))
+		if (!tar_write_compressed_data(const_cast<void*>(buf), count, false))
 			return -1;
 		((TarMethodFile *) f)->currpos += count;
 		return count;
@@ -554,7 +557,7 @@ tar_open_for_write(const char *pathname, const char *temp_suffix, size_t pad_to_
 			tar_data->zp->zalloc = Z_NULL;
 			tar_data->zp->zfree = Z_NULL;
 			tar_data->zp->opaque = Z_NULL;
-			tar_data->zp->next_out = tar_data->zlibOut;
+			tar_data->zp->next_out = (Bytef*)tar_data->zlibOut;
 			tar_data->zp->avail_out = ZLIB_OUT_SIZE;
 
 			/*
@@ -582,7 +585,7 @@ tar_open_for_write(const char *pathname, const char *temp_suffix, size_t pad_to_
 		return NULL;
 	}
 
-	tar_data->currentfile = pg_malloc0(sizeof(TarMethodFile));
+	tar_data->currentfile = (TarMethodFile*)pg_malloc0(sizeof(TarMethodFile));
 
 	snprintf(tmppath, sizeof(tmppath), "%s%s",
 			 pathname, temp_suffix ? temp_suffix : "");
@@ -985,7 +988,7 @@ CreateWalTarMethod(const char *tarbase, int compression, bool sync)
 	WalWriteMethod *method;
 	const char *suffix = (compression != 0) ? ".tar.gz" : ".tar";
 
-	method = pg_malloc0(sizeof(WalWriteMethod));
+	method = (WalWriteMethod*)pg_malloc0(sizeof(WalWriteMethod));
 	method->open_for_write = tar_open_for_write;
 	method->write = tar_write;
 	method->get_current_pos = tar_get_current_pos;
@@ -996,8 +999,8 @@ CreateWalTarMethod(const char *tarbase, int compression, bool sync)
 	method->finish = tar_finish;
 	method->getlasterror = tar_getlasterror;
 
-	tar_data = pg_malloc0(sizeof(TarMethodData));
-	tar_data->tarfilename = pg_malloc0(strlen(tarbase) + strlen(suffix) + 1);
+	tar_data = (TarMethodData*)pg_malloc0(sizeof(TarMethodData));
+	tar_data->tarfilename = (char*)pg_malloc0(strlen(tarbase) + strlen(suffix) + 1);
 	sprintf(tar_data->tarfilename, "%s%s", tarbase, suffix);
 	tar_data->fd = -1;
 	tar_data->compression = compression;
@@ -1020,3 +1023,7 @@ FreeWalTarMethod(void)
 #endif
 	pg_free(tar_data);
 }
+
+#ifdef __cplusplus
+}
+#endif
