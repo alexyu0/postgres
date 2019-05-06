@@ -544,30 +544,8 @@ SendTimeLineHistory(TimeLineHistoryCmd *cmd)
 static void
 StartReplication(StartReplicationCmd *cmd)
 {
-  printf("%ld, %ld\n", (long)getpid(), (long)getppid());
-	printf("Starting replication!!!!!\n");
 	StringInfoData buf;
 	XLogRecPtr	FlushPtr;
-	printf("Starting replication 2\n");
-
-	if (ThisTimeLineID == 0)
-		ereport(ERROR,
-				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-				 errmsg("IDENTIFY_SYSTEM has not been run before START_REPLICATION")));
-
-	/*
-	 * We assume here that we're logging enough information in the WAL for
-	 * log-shipping, since this is checked in PostmasterMain().
-	 *
-	 * NOTE: wal_level can only change at shutdown, so in most cases it is
-	 * difficult for there to be WAL data that we can still see that was
-	 * written at wal_level='minimal'.
-	 */
-
-  // init eRPC client
-	printf("Initializing erpc client\n");
-  erpc_client_t erpc_client_blob = init_client();
-	printf("eRPC client initialized\n");
 
 	if (cmd->slotname)
 	{
@@ -707,11 +685,22 @@ StartReplication(StartReplicationCmd *cmd)
 		/* Main loop of walsender */
 		replication_active = true;
 
+    bool USE_ERPC = true;
+    if (USE_ERPC) {
+      ereport(LOG, (errmsg("eRPC client initializing")));
+      erpc_client_blob = init_client();
+      ereport(LOG, (errmsg("eRPC client initialized - ereport")));
+    }
+    ereport(LOG, (errmsg("entering WalSndLoop")));
 		WalSndLoop(XLogSendPhysical);
+    ereport(LOG, (errmsg("left WalSndLoop")));
 
 		replication_active = false;
-		if (got_STOPPING)
+    ereport(LOG, (errmsg("replication_active : %d", replication_active)));
+		if (got_STOPPING) {
+      ereport(LOG, (errmsg("stopping")));
 			proc_exit(0);
+    }
 		WalSndSetState(WALSNDSTATE_STARTUP);
 
 		Assert(streamingDoneSending && streamingDoneReceiving);
@@ -724,8 +713,10 @@ StartReplication(StartReplicationCmd *cmd)
 	 * Copy is finished now. Send a single-row result set indicating the next
 	 * timeline.
 	 */
+  ereport(LOG, (errmsg("copy finished")));
 	if (sendTimeLineIsHistoric)
 	{
+    ereport(LOG, (errmsg("sendTimeLineIsHistoric = true here")));
 		char		startpos_str[8 + 1 + 8 + 1];
 		DestReceiver *dest;
 		TupOutputState *tstate;
@@ -764,7 +755,10 @@ StartReplication(StartReplicationCmd *cmd)
 	}
 
   // delete eRPC client
-  delete_client(erpc_client_blob);
+  if (erpc_client_blob != (void *)NULL) {
+    ereport(LOG, (errmsg("deleting eRPC client")));
+    delete_client(erpc_client_blob);
+  }
 
 	/* Send CommandComplete message */
 	pq_puttextmessage('C', "START_STREAMING");
@@ -1525,6 +1519,7 @@ exec_replication_command(const char *cmd_string)
 	/* Report to pgstat that this process is running */
 	pgstat_report_activity(STATE_RUNNING, NULL);
 
+  ereport(LOG, (errmsg("exec replication - node %u, string %s", cmd_node->type, cmd_string)));
 	switch (cmd_node->type)
 	{
 		case T_IdentifySystemCmd:
@@ -1550,9 +1545,10 @@ exec_replication_command(const char *cmd_string)
 
 				PreventInTransactionBlock(true, "START_REPLICATION");
 
-				if (cmd->kind == REPLICATION_KIND_PHYSICAL)
+				if (cmd->kind == REPLICATION_KIND_PHYSICAL) {
+          ereport(LOG, (errmsg("starting physical replication")));
 					StartReplication(cmd);
-				else
+        } else
 					StartLogicalReplication(cmd);
 				break;
 			}
@@ -2190,9 +2186,13 @@ WalSndLoop(WalSndSendDataCallback send_data)
 		 * ourselves, and the output buffer is empty, it's time to exit
 		 * streaming.
 		 */
-		if (streamingDoneReceiving && streamingDoneSending &&
-			!pq_is_send_pending())
+    ereport(LOG, (errmsg("done receiving %d, done sending %d, send pending %d",
+            streamingDoneReceiving, streamingDoneSending, pq_is_send_pending())));
+    if (streamingDoneReceiving && streamingDoneSending &&
+			!pq_is_send_pending()) {
+      ereport(LOG, (errmsg("break")));
 			break;
+    }
 
 		/*
 		 * If we don't have any pending data in the output buffer, try to send
@@ -2200,10 +2200,14 @@ WalSndLoop(WalSndSendDataCallback send_data)
 		 * again until we've flushed it ... but we'd better assume we are not
 		 * caught up.
 		 */
-		if (!pq_is_send_pending())
+    ereport(LOG, (errmsg("send pending %d", pq_is_send_pending())));
+		if (!pq_is_send_pending()) {
+      ereport(LOG, (errmsg("sending data")));
 			send_data();
-		else
-			WalSndCaughtUp = false;
+    } else {
+      ereport(LOG, (errmsg("caught up")));
+      WalSndCaughtUp = false;
+    }
 
 		/* Try to flush pending output to the client */
 		if (pq_flush_if_writable() != 0)
@@ -2276,6 +2280,7 @@ WalSndLoop(WalSndSendDataCallback send_data)
 									 WAIT_EVENT_WAL_SENDER_MAIN);
 		}
 	}
+  ereport(LOG, (errmsg("bye")));
 	return;
 }
 
@@ -2552,6 +2557,7 @@ retry:
 static void
 XLogSendPhysical(void)
 {
+  ereport(LOG, (errmsg("Entered XLogSendPhysical\n")));
 	XLogRecPtr	SendRqstPtr;
 	XLogRecPtr	startptr;
 	XLogRecPtr	endptr;
@@ -2703,12 +2709,14 @@ XLogSendPhysical(void)
 		sendFile = -1;
 
 		/* Send CopyDone */
+    ereport(LOG, (errmsg("SENDING MESSAGE")));
+    printf("We need to send a message!\n");
     if (erpc_client_blob == (void *)NULL)
       pq_putmessage_noblock('c', NULL, 0);
     else {
       // send using eRPC
-      printf("Sending message with eRPC\n");
-      set_message(erpc_client_blob, NULL, 0);
+      ereport(LOG, (errmsg("eRPC SENDING \'c\' MESSAGE")));
+      set_message(erpc_client_blob, "c", 1);
     }
 		streamingDoneSending = true;
 
@@ -2789,13 +2797,28 @@ XLogSendPhysical(void)
 	memcpy(&output_message.data[1 + sizeof(int64) + sizeof(int64)],
 		   tmpbuf.data, sizeof(int64));
 
+  ereport(LOG, (errmsg("We need to send a message!")));
   if (erpc_client_blob == (void *)NULL)
     pq_putmessage_noblock('d', output_message.data, output_message.len);
   else {
     // send using eRPC
-    printf("Sending eRPC message of len: %d\n", output_message.len);
-    set_message(erpc_client_blob, output_message.data, output_message.len);
+    /*
+    ereport(LOG, (errmsg("basic test\n")));
+    char* test_msg = (char*)malloc(10);
+    int test_len = sprintf(test_msg, "testmsg");
+    set_message(erpc_client_blob, test_msg, test_len);
+    ereport(LOG, (errmsg("passed\n")));
+    */
+    //ereport(LOG, (errmsg("eRPC SENDING MESSAGE OF LEN: %d", output_message.len + 1)));
+    char* msg = (char*)malloc(output_message.len + 1);
+    //int len = sprintf(msg, "d%s", output_message.data);
+    char msg_type = 'd';
+    memcpy(msg, (char *)(&msg_type), sizeof(char));
+    int len = sprintf(&msg[1], "%s", output_message.data);
+    memcpy(msg + 1, (char *)output_message.data, output_message.len);
+    set_message(erpc_client_blob, msg, output_message.len + 1);
   }
+  ereport(LOG, (errmsg("Message sent!")));
 
 	sentPtr = endptr;
 
