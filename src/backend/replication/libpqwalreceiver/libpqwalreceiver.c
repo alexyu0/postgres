@@ -24,6 +24,7 @@ extern "C" {
 #include <sys/time.h>
 
 #include "libpq-fe.h"
+#include "libpq-int.h"
 #include "pqexpbuffer.h"
 #include "access/xlog.h"
 #include "catalog/pg_type.h"
@@ -199,6 +200,7 @@ libpqrcv_connect(const char *conninfo, bool logical, const char *appname,
 		/* Interrupted? */
 		if (rc & WL_LATCH_SET)
 		{
+      ereport(LOG, (errmsg("entering ResetLatch at libpqwalreceiveer 204")));
 			ResetLatch(MyLatch);
 			CHECK_FOR_INTERRUPTS();
 		}
@@ -216,6 +218,8 @@ libpqrcv_connect(const char *conninfo, bool logical, const char *appname,
 
 	conn->logical = logical;
 
+  ereport(LOG, (errmsg("\n\nPROTOCOL VERSION: %d\n\n",
+          conn->streamConn->pversion >> 16)));
 	return conn;
 }
 
@@ -622,6 +626,7 @@ libpqrcv_PQexec(PGconn *streamConn, const char *query)
 			/* Interrupted? */
 			if (rc & WL_LATCH_SET)
 			{
+        ereport(LOG, (errmsg("entering ResetLatch at libpqwalreceiveer 630")));
 				ResetLatch(MyLatch);
 				CHECK_FOR_INTERRUPTS();
 			}

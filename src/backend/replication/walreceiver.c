@@ -477,6 +477,10 @@ WalReceiverMain(void)
             //ereport(LOG, (errmsg("Did not receive any message from eRPC yet")));
           } else {
             ereport(LOG, (errmsg("Received message from eRPC of len %d\n", len)));
+            ereport(LOG, (errmsg("Received message - %.*s\n", len, buf)));
+            ereport(LOG, (errmsg("Received message - %.*s\n", len, buf)));
+            ereport(LOG, (errmsg("Received message - %c %c %c\n",
+                    (buf[len-3]), (buf[len-2]), (buf[len-1]))));
           }
         }
 				if (len != 0)
@@ -495,53 +499,69 @@ WalReceiverMain(void)
 							 */
 							last_recv_timestamp = GetCurrentTimestamp();
 							ping_sent = false;
-							XLogWalRcvProcessMsg(buf[0], &buf[1], len - 1);
-						}
-						else if (len == 0)
-            {
+							if (!USE_ERPC || erpc_server_blob == (void *)NULL) {
+                XLogWalRcvProcessMsg(buf[0], &buf[1], len - 1);
+              } else {
+                XLogWalRcvProcessMsg(buf[1], &buf[2], len - 2);
+              }
+            } else if (len == 0) {
 							break;
+            } else if (len < 0) {
+              ereport(LOG, (errmsg("breaking and setting endofwal\n")));
+                ereport(LOG,
+                    (errmsg("replication terminated by primary server"),
+                    errdetail("End of WAL reached on timeline %u at %X/%X.",
+                          startpointTLI,
+                          (uint32) (LogstreamResult.Write >> 32), (uint32) LogstreamResult.Write)));
+                endofwal = true;
+                break;
             }
-             else if (len < 0) {
 
-							ereport(LOG,
-									(errmsg("replication terminated by primary server"),
-									 errdetail("End of WAL reached on timeline %u at %X/%X.",
-											   startpointTLI,
-											   (uint32) (LogstreamResult.Write >> 32), (uint32) LogstreamResult.Write)));
-							endofwal = true;
-							break;
-
-          }
-
-             if (erpc_server_blob == (void *)NULL)
-               len = walrcv_receive(wrconn, &buf, &wait_fd);
-             else {
-               // receive using eRPC
-               run_event_loop(erpc_server_blob, 0);
-               len = get_message(&buf);
-               if (len == 0) {
-                 //*wait_fd = PQsocket(wrconn->streamConn);
-                 ereport(LOG, (errmsg("Did not receive any message from eRPC yet")));
-               } else {
-                 ereport(LOG, (errmsg("Received message from eRPC of len %d\n", len)));
-               }
-             }
+            if (erpc_server_blob == (void *)NULL)
+              len = walrcv_receive(wrconn, &buf, &wait_fd);
+            else {
+              // receive using eRPC
+              run_event_loop(erpc_server_blob, 0);
+              len = get_message(&buf);
+              /*
+              while (len == 0) {
+                run_event_loop(erpc_server_blob, 0);
+                len = get_message(&buf);
+              }
+              ereport(LOG, (errmsg("broke erpc get_message loop, got %d", len)));
+              */
+              if (len == 0) {
+                //*wait_fd = PQsocket(wrconn->streamConn);
+                //ereport(LOG, (errmsg("Did not receive any message from eRPC yet")));
+              } else {
+                ereport(LOG, (errmsg("Received message from eRPC of len %d\n", len)));
+                ereport(LOG, (errmsg("Received message - %.*s\n", len, buf)));
+                ereport(LOG, (errmsg("Received message - %c %c %c\n",
+                        (buf[len-3]), (buf[len-2]), (buf[len-1]))));
+              }
+            }
           }
 
 					/* Let the master know that we received some data. */
+          ereport(LOG, (errmsg("before XLogWalRcvSendReply")));
 					XLogWalRcvSendReply(false, false);
+          ereport(LOG, (errmsg("after XLogWalRcvSendReply")));
 
 					/*
 					 * If we've written some records, flush them to disk and
 					 * let the startup process and primary server know about
 					 * them.
 					 */
+          ereport(LOG, (errmsg("before XLogWalRcvFlush")));
 					XLogWalRcvFlush(false);
+          ereport(LOG, (errmsg("after XLogWalRcvFlush")));
 				}
 
 				/* Check if we need to exit the streaming loop. */
-				if (endofwal)
+				if (endofwal) {
+          ereport(LOG, (errmsg("endofwal, breaking streaming loop\n")));
 					break;
+        }
 
 				/*
 				 * Ideally we would reuse a WaitEventSet object repeatedly
@@ -570,8 +590,9 @@ WalReceiverMain(void)
         sleep(1);
 				ereport(LOG, (errmsg("Wake me up inside (cant wake up)")));
         */
-        if (rc & WL_LATCH_SET)
+        if (!USE_ERPC && (rc & WL_LATCH_SET))
 				{
+          ereport(LOG, (errmsg("entering WaitLatchOrSocket walreceiver 596")));
 					ResetLatch(walrcv->latch);
 					if (walrcv->force_reply)
 					{
@@ -586,7 +607,7 @@ WalReceiverMain(void)
 						XLogWalRcvSendReply(true, false);
 					}
 				}
-				if (rc & WL_TIMEOUT)
+				if (!USE_ERPC && (rc & WL_TIMEOUT))
 				{
 					/*
 					 * We didn't receive anything new. If we haven't heard
@@ -635,6 +656,15 @@ WalReceiverMain(void)
 					XLogWalRcvSendReply(requestReply, requestReply);
 					XLogWalRcvSendHSFeedback(false);
 				}
+        else if (USE_ERPC) {
+          /*
+          ereport(LOG, (errmsg("send reply")));
+					XLogWalRcvSendReply(true, true);
+          ereport(LOG, (errmsg("send feedback")));
+					XLogWalRcvSendHSFeedback(false);
+          ereport(LOG, (errmsg("both done")));
+          */
+        }
 			}
 
 			/*
@@ -642,6 +672,7 @@ WalReceiverMain(void)
 			 * our side, too.
 			 */
 			EnableWalRcvImmediateExit();
+      ereport(LOG, (errmsg("Trying to send EOF message")));
 			walrcv_endstreaming(wrconn, &primaryTLI);
 			DisableWalRcvImmediateExit();
 
@@ -686,6 +717,7 @@ WalReceiverMain(void)
 
     if (USE_ERPC && erpc_server_blob != (void *)NULL) {
       // destroy eRPC server
+      ereport(LOG, (errmsg("Deleting eRPC server")));
       delete_server(erpc_server_blob);
       ereport(LOG, (errmsg("Deleted eRPC server")));
     }
@@ -729,6 +761,7 @@ WalRcvWaitForStartPosition(XLogRecPtr *startpoint, TimeLineID *startpointTLI)
 	WakeupRecovery();
 	for (;;)
 	{
+    ereport(LOG, (errmsg("entering ResetLatch at walreceiveer 760")));
 		ResetLatch(walrcv->latch);
 
 		ProcessWalRcvInterrupts();

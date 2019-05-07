@@ -1236,11 +1236,13 @@ WalSndWriteData(LogicalDecodingContext *ctx, XLogRecPtr lsn, TransactionId xid,
 			WL_SOCKET_WRITEABLE | WL_SOCKET_READABLE | WL_TIMEOUT;
 
 		/* Sleep until something happens or we time out */
+    ereport(LOG, (errmsg("entering WaitLatchOrSocket from walsnder 1239")));
 		(void) WaitLatchOrSocket(MyLatch, wakeEvents,
 								 MyProcPort->sock, sleeptime,
 								 WAIT_EVENT_WAL_SENDER_WRITE_DATA);
 
 		/* Clear any already-pending wakeups */
+    ereport(LOG, (errmsg("entering ResetLatch at walsender 1245")));
 		ResetLatch(MyLatch);
 
 		CHECK_FOR_INTERRUPTS();
@@ -1320,6 +1322,7 @@ WalSndWaitForWal(XLogRecPtr loc)
 		long		sleeptime;
 
 		/* Clear any already-pending wakeups */
+    ereport(LOG, (errmsg("entering ResetLatch at walsender 1325")));
 		ResetLatch(MyLatch);
 
 		CHECK_FOR_INTERRUPTS();
@@ -1416,6 +1419,7 @@ WalSndWaitForWal(XLogRecPtr loc)
 		if (pq_is_send_pending())
 			wakeEvents |= WL_SOCKET_WRITEABLE;
 
+    ereport(LOG, (errmsg("entering WaitLatchOrSocket from walsender 1420")));
 		(void) WaitLatchOrSocket(MyLatch, wakeEvents,
 								 MyProcPort->sock, sleeptime,
 								 WAIT_EVENT_WAL_SENDER_WAIT_WAL);
@@ -2166,6 +2170,7 @@ WalSndLoop(WalSndSendDataCallback send_data)
 	for (;;)
 	{
 		/* Clear any already-pending wakeups */
+    ereport(LOG, (errmsg("entering ResetLatch at walsender 2173")));
 		ResetLatch(MyLatch);
 
 		CHECK_FOR_INTERRUPTS();
@@ -2275,6 +2280,7 @@ WalSndLoop(WalSndSendDataCallback send_data)
 				wakeEvents |= WL_SOCKET_WRITEABLE;
 
 			/* Sleep until something happens or we time out */
+      ereport(LOG, (errmsg("entering WaitLatchOrSocket from walsender 2280")));
 			(void) WaitLatchOrSocket(MyLatch, wakeEvents,
 									 MyProcPort->sock, sleeptime,
 									 WAIT_EVENT_WAL_SENDER_MAIN);

@@ -344,6 +344,7 @@ int
 WaitLatch(volatile Latch *latch, int wakeEvents, long timeout,
 		  uint32 wait_event_info)
 {
+  //ereport(LOG, (errmsg("entering WaitLatchOrSocket from latch 347")));
 	return WaitLatchOrSocket(latch, wakeEvents, PGINVALID_SOCKET, timeout,
 							 wait_event_info);
 }
