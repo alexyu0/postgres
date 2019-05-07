@@ -519,7 +519,7 @@ LogStreamerMain(logstreamer_param *param)
   erpc_server_t server = NULL;
   if (USE_ERPC) {
     //ereport(LOG, (errmsg("Initializing eRPC server in pg_basebackup")));
-    server = init_server();
+    server = init_server(0);
     //ereport(LOG, (errmsg("eRPC server initialized in pg_basebackup")));
   }
 

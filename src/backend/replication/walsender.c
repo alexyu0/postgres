@@ -100,7 +100,7 @@ extern "C" {
 #include "myserver.h"
 
 // declare eRPC client as NULL at first
-bool USE_ERPC = true;
+bool WAL_SND_USE_ERPC = true;
 erpc_client_t wal_snd_erpc_client;
 erpc_server_t wal_snd_erpc_server;
 
@@ -690,12 +690,12 @@ StartReplication(StartReplicationCmd *cmd)
 		/* Main loop of walsender */
 		replication_active = true;
 
-    if (USE_ERPC) {
-      ereport(LOG, (errmsg("eRPC client initializing")));
-      wal_snd_erpc_client = init_client(instance_no=0);
+    if (WAL_SND_USE_ERPC) {
+      ereport(LOG, (errmsg("eRPC client 0 initializing")));
+      wal_snd_erpc_client = init_client(0);
       ereport(LOG, (errmsg("eRPC client initialized - ereport")));
-      ereport(LOG, (errmsg("eRPC server initializing")));
-      wal_snd_erpc_server = init_server(instance_no=0);
+      ereport(LOG, (errmsg("eRPC server 1 initializing")));
+      wal_snd_erpc_server = init_server(1);
       ereport(LOG, (errmsg("eRPC server initialized - ereport")));
     }
     ereport(LOG, (errmsg("entering WalSndLoop")));
@@ -763,7 +763,7 @@ StartReplication(StartReplicationCmd *cmd)
 	}
 
   // delete eRPC client
-  if (wal_snd_erpc_client != (void *)NULL) { 
+  if (wal_snd_erpc_client != (void *)NULL) {
     ereport(LOG, (errmsg("deleting eRPC client")));
     delete_client(wal_snd_erpc_client);
   }
@@ -1628,15 +1628,15 @@ ProcessRepliesIfAny(void)
 
 	for (;;)
 	{
-    if (USE_ERPC) {
+    if (WAL_SND_USE_ERPC) {
       run_event_loop(wal_snd_erpc_server, 0);
-      len = get_message(&(reply_message->data));
+      int len = get_message(&(reply_message.data));
       if (len == 0) {
         // no data available, break
         break;
       } else {
-        firstchar = (reply_message->data)[0];
-        reply_message->data++;
+        firstchar = (reply_message.data)[0];
+        reply_message.data++;
       }
     } else {
       pq_startmsgread();
@@ -2300,7 +2300,7 @@ WalSndLoop(WalSndSendDataCallback send_data)
 		 * pq_flush_if_writable flushed it all --- we should immediately try
 		 * to send more.
 		 */
-		if (!USE_ERPC && ((WalSndCaughtUp && !streamingDoneSending) || pq_is_send_pending()))
+		if (!WAL_SND_USE_ERPC && ((WalSndCaughtUp && !streamingDoneSending) || pq_is_send_pending()))
 		{
       ereport(LOG, (errmsg("blocking on socket")));
 			long		sleeptime;
@@ -2324,7 +2324,7 @@ WalSndLoop(WalSndSendDataCallback send_data)
 									 MyProcPort->sock, sleeptime,
 									 WAIT_EVENT_WAL_SENDER_MAIN);
 		}
-    else if (USE_ERPC) {
+    else if (WAL_SND_USE_ERPC) {
       // manual sleep for testing
 			long		sleeptime;
 			sleeptime = WalSndComputeSleeptime(GetCurrentTimestamp());
