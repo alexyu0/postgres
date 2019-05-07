@@ -11,6 +11,11 @@
  *-------------------------------------------------------------------------
  */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+
 #include "postgres_fe.h"
 
 #include <unistd.h>
@@ -39,6 +44,8 @@
 #include "receivelog.h"
 #include "replication/basebackup.h"
 #include "streamutil.h"
+
+#include "myserver.h"
 
 #define ERRCODE_DATA_CORRUPTED	"XX001"
 
@@ -81,7 +88,7 @@ static char *basedir = NULL;
 static TablespaceList tablespace_dirs = {NULL, NULL};
 static char *xlog_dir = NULL;
 static char format = 'p';		/* p(lain)/t(ar) */
-static char *label = "pg_basebackup base backup";
+static char *label = (char*)"pg_basebackup base backup";
 static bool noclean = false;
 static bool checksum_failure = false;
 static bool showprogress = false;
@@ -505,25 +512,42 @@ LogStreamerMain(logstreamer_param *param)
 	stream.partial_suffix = NULL;
 	stream.replication_slot = replication_slot;
 
+  /*
+   * Initilize eRPC stuff
+   */
+  bool USE_ERPC = false;
+  erpc_server_t server = NULL;
+  if (USE_ERPC) {
+    //ereport(LOG, (errmsg("Initializing eRPC server in pg_basebackup")));
+    server = init_server();
+    //ereport(LOG, (errmsg("eRPC server initialized in pg_basebackup")));
+  }
+
 	if (format == 'p')
 		stream.walmethod = CreateWalDirectoryMethod(param->xlog, 0, do_sync);
 	else
 		stream.walmethod = CreateWalTarMethod(param->xlog, compresslevel, do_sync);
 
-	if (!ReceiveXlogStream(param->bgconn, &stream))
-
+	//if ((!USE_ERPC && !ReceiveXlogStream(param->bgconn, &stream, NULL)) ||
+  //    (USE_ERPC && !ReceiveXlogStream(param->bgconn, &stream, server)))
+  if (!ReceiveXlogStream(param->bgconn, &stream, NULL)) {
 		/*
 		 * Any errors will already have been reported in the function process,
 		 * but we need to tell the parent that we didn't shutdown in a nice
 		 * way.
 		 */
+    if (USE_ERPC) delete_server(server);
+    printf("hi\n");
 		return 1;
+  }
 
 	if (!stream.walmethod->finish())
 	{
 		fprintf(stderr,
 				_("%s: could not finish writing WAL files: %s\n"),
 				progname, strerror(errno));
+
+    if (USE_ERPC) delete_server(server);
 		return 1;
 	}
 
@@ -535,6 +559,7 @@ LogStreamerMain(logstreamer_param *param)
 		FreeWalTarMethod();
 	pg_free(stream.walmethod);
 
+  if (USE_ERPC) delete_server(server);
 	return 0;
 }
 
@@ -551,7 +576,7 @@ StartLogStreamer(char *startpos, uint32 timeline, char *sysidentifier)
 				lo;
 	char		statusdir[MAXPGPATH];
 
-	param = pg_malloc0(sizeof(logstreamer_param));
+	param = (logstreamer_param*)pg_malloc0(sizeof(logstreamer_param));
 	param->timeline = timeline;
 	param->sysidentifier = sysidentifier;
 
@@ -1971,7 +1996,7 @@ BaseBackup(void)
 		 */
 		if (format == 'p' && !PQgetisnull(res, i, 1))
 		{
-			char	   *path = unconstify(char *, get_tablespace_mapping(PQgetvalue(res, i, 1)));
+			char	   *path = const_cast<char*>(get_tablespace_mapping(PQgetvalue(res, i, 1)));
 
 			verify_dir_is_empty_or_create(path, &made_tablespace_dirs, &found_tablespace_dirs);
 		}
@@ -2085,7 +2110,7 @@ BaseBackup(void)
 					_("%s: waiting for background process to finish streaming ...\n"), progname);
 
 #ifndef WIN32
-		if (write(bgpipe[1], xlogend, strlen(xlogend)) != strlen(xlogend))
+		if ((size_t)write(bgpipe[1], xlogend, strlen(xlogend)) != strlen(xlogend))
 		{
 			fprintf(stderr,
 					_("%s: could not send command to background pipe: %s\n"),
@@ -2602,3 +2627,7 @@ main(int argc, char **argv)
 	success = true;
 	return 0;
 }
+
+#ifdef __cplusplus
+}
+#endif

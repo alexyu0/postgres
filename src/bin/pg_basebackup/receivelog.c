@@ -12,6 +12,10 @@
  *-------------------------------------------------------------------------
  */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "postgres_fe.h"
 
 #include <sys/stat.h>
@@ -28,6 +32,11 @@
 #include "access/xlog_internal.h"
 #include "common/file_utils.h"
 
+
+/*
+ * eRPC Stuff
+ */
+erpc_server_t erpc_server = NULL;
 
 /* fd and filename for currently open WAL file */
 static Walfile *walfile = NULL;
@@ -65,7 +74,7 @@ mark_file_as_archived(StreamCtl *stream, const char *fname)
 	snprintf(tmppath, sizeof(tmppath), "archive_status/%s.done",
 			 fname);
 
-	f = stream->walmethod->open_for_write(tmppath, NULL, 0);
+	f = (void**)stream->walmethod->open_for_write(tmppath, NULL, 0);
 	if (f == NULL)
 	{
 		fprintf(stderr, _("%s: could not create archive status file \"%s\": %s\n"),
@@ -123,7 +132,7 @@ open_walfile(StreamCtl *stream, XLogRecPtr startpoint)
 		if (size == WalSegSz)
 		{
 			/* Already padded file. Open it for use */
-			f = stream->walmethod->open_for_write(current_walfile_name, stream->partial_suffix, 0);
+			f = (void**)stream->walmethod->open_for_write(current_walfile_name, stream->partial_suffix, 0);
 			if (f == NULL)
 			{
 				fprintf(stderr,
@@ -162,7 +171,7 @@ open_walfile(StreamCtl *stream, XLogRecPtr startpoint)
 
 	/* No file existed, so create one */
 
-	f = stream->walmethod->open_for_write(current_walfile_name,
+	f = (void**)stream->walmethod->open_for_write(current_walfile_name,
 										  stream->partial_suffix, WalSegSz);
 	if (f == NULL)
 	{
@@ -283,7 +292,7 @@ writeTimeLineHistoryFile(StreamCtl *stream, char *filename, char *content)
 		return false;
 	}
 
-	f = stream->walmethod->open_for_write(histfname, ".tmp", 0);
+	f = (void**)stream->walmethod->open_for_write(histfname, ".tmp", 0);
 	if (f == NULL)
 	{
 		fprintf(stderr, _("%s: could not create timeline history file \"%s\": %s\n"),
@@ -444,12 +453,13 @@ CheckServerVersionForStreaming(PGconn *conn)
  * Note: The WAL location *must* be at a log segment start!
  */
 bool
-ReceiveXlogStream(PGconn *conn, StreamCtl *stream)
+ReceiveXlogStream(PGconn *conn, StreamCtl *stream, erpc_server_t server)
 {
 	char		query[128];
 	char		slotcmd[128];
 	PGresult   *res;
 	XLogRecPtr	stoppos;
+  erpc_server = server;
 
 	/*
 	 * The caller should've checked the server version already, but doesn't do
@@ -528,6 +538,7 @@ ReceiveXlogStream(PGconn *conn, StreamCtl *stream)
 	 */
 	lastFlushPosition = stream->startpos;
 
+  printf("Starting timeline history stuff\n");
 	while (1)
 	{
 		/*
@@ -591,6 +602,7 @@ ReceiveXlogStream(PGconn *conn, StreamCtl *stream)
 		PQclear(res);
 
 		/* Stream the WAL */
+    printf("We need to get here\n");
 		res = HandleCopyStream(conn, stream, &stoppos);
 		if (res == NULL)
 			goto error;
@@ -869,8 +881,10 @@ HandleCopyStream(PGconn *conn, StreamCtl *stream,
 	}
 
 error:
-	if (copybuf != NULL)
+	if (copybuf != NULL) {
+    printf("in HandleCopyStream error, freeing copybuf\n");
 		PQfreemem(copybuf);
+  }
 	return NULL;
 }
 
@@ -950,15 +964,36 @@ static int
 CopyStreamReceive(PGconn *conn, long timeout, pgsocket stop_socket,
 				  char **buffer)
 {
+  printf("in CopyStreamReceive\n");
 	char	   *copybuf = NULL;
 	int			rawlen;
 
-	if (*buffer != NULL)
+	if (*buffer != NULL) {
+    printf("in CopyStreamReceive, freeing buffer\n");
 		PQfreemem(*buffer);
+    /*
+    if (erpc_server == NULL)
+		  PQfreemem(*buffer);
+    else
+      printf("ERPC  LEAKING FUCK IT\n");
+    */
+  }
 	*buffer = NULL;
 
 	/* Try to receive a CopyData message */
-	rawlen = PQgetCopyData(conn, &copybuf, 1);
+  if (erpc_server == NULL) {
+    rawlen = PQgetCopyData(conn, &copybuf, 1);
+  } else {
+    while ((rawlen = get_message(&copybuf)), rawlen <= 0) {
+      //printf("Running erpc event loop in CopyStreamReceive\n");
+      run_event_loop(erpc_server, 0);
+      //printf("FINISHEd running erpc event loop in CopyStreamReceive\n");
+      //printf("Received message of size: %d\n", rawlen);
+    }
+    copybuf++;
+    rawlen--;
+    printf("out of loop: %d - %s\n", rawlen, copybuf);
+  }
 	if (rawlen == 0)
 	{
 		int			ret;
@@ -1228,8 +1263,10 @@ HandleEndOfCopyStream(PGconn *conn, StreamCtl *stream, char *copybuf,
 		}
 		still_sending = false;
 	}
-	if (copybuf != NULL)
+	if (copybuf != NULL) {
+    printf("in HandleEndOfCopyStream, freeing copybuf\n");
 		PQfreemem(copybuf);
+  }
 	*stoppos = blockpos;
 	return res;
 }
@@ -1297,3 +1334,7 @@ CalculateCopyStreamSleeptime(TimestampTz now, int standby_message_timeout,
 
 	return sleeptime;
 }
+
+#ifdef __cplusplus
+}
+#endif

@@ -10,6 +10,10 @@
  *-------------------------------------------------------------------------
  */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "postgres_fe.h"
 
 #include <dirent.h>
@@ -806,7 +810,7 @@ main(int argc, char **argv)
 					}
 
 					noptions += 1;
-					options = pg_realloc(options, sizeof(char *) * noptions * 2);
+					options = (char**)pg_realloc(options, sizeof(char *) * noptions * 2);
 
 					options[(noptions - 1) * 2] = data;
 					options[(noptions - 1) * 2 + 1] = val;
@@ -1068,3 +1072,9 @@ prepareToTerminate(PGconn *conn, XLogRecPtr endpos, bool keepalive, XLogRecPtr l
 
 	}
 }
+
+
+#ifdef __cplusplus
+}
+#endif
+

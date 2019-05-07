@@ -12,6 +12,10 @@
  *-------------------------------------------------------------------------
  */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "postgres_fe.h"
 
 #include <dirent.h>
@@ -442,7 +446,7 @@ StreamLog(void)
 	stream.partial_suffix = ".partial";
 	stream.replication_slot = replication_slot;
 
-	ReceiveXlogStream(conn, &stream);
+	ReceiveXlogStream(conn, &stream, NULL);
 
 	if (!stream.walmethod->finish())
 	{
@@ -799,3 +803,8 @@ main(int argc, char **argv)
 		}
 	}
 }
+
+#ifdef __cplusplus
+}
+#endif
+

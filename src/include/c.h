@@ -43,6 +43,10 @@
  *
  *----------------------------------------------------------------
  */
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef C_H
 #define C_H
 
@@ -1261,3 +1265,7 @@ extern unsigned long long strtoull(const char *str, char **endptr, int base);
 #include "port.h"
 
 #endif							/* C_H */
+
+#ifdef __cplusplus
+}
+#endif
