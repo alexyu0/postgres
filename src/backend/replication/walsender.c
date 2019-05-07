@@ -97,6 +97,12 @@ extern "C" {
 #include "utils/timeout.h"
 #include "utils/timestamp.h"
 #include "myclient.h"
+#include "myserver.h"
+
+// declare eRPC client as NULL at first
+bool USE_ERPC = true;
+erpc_client_t wal_snd_erpc_client;
+erpc_server_t wal_snd_erpc_server;
 
 
 /*
@@ -128,10 +134,6 @@ int			max_wal_senders = 0;	/* the maximum number of concurrent
 int			wal_sender_timeout = 60 * 1000; /* maximum time to send one WAL
 											 * data message */
 bool		log_replication_commands = false;
-
-// declare eRPC client as NULL at first
-bool USE_ERPC = true;
-erpc_client_t erpc_client_blob = (void *)NULL;
 
 /*
  * State for WalSndWakeupRequest
@@ -690,8 +692,11 @@ StartReplication(StartReplicationCmd *cmd)
 
     if (USE_ERPC) {
       ereport(LOG, (errmsg("eRPC client initializing")));
-      erpc_client_blob = init_client();
+      wal_snd_erpc_client = init_client(instance_no=0);
       ereport(LOG, (errmsg("eRPC client initialized - ereport")));
+      ereport(LOG, (errmsg("eRPC server initializing")));
+      wal_snd_erpc_server = init_server(instance_no=0);
+      ereport(LOG, (errmsg("eRPC server initialized - ereport")));
     }
     ereport(LOG, (errmsg("entering WalSndLoop")));
     ereport(LOG, (errmsg("sendTimeLineIsHistoric = %d", sendTimeLineIsHistoric)));
@@ -758,9 +763,13 @@ StartReplication(StartReplicationCmd *cmd)
 	}
 
   // delete eRPC client
-  if (erpc_client_blob != (void *)NULL) {
+  if (wal_snd_erpc_client != (void *)NULL) { 
     ereport(LOG, (errmsg("deleting eRPC client")));
-    delete_client(erpc_client_blob);
+    delete_client(wal_snd_erpc_client);
+  }
+  if (wal_snd_erpc_server != (void *)NULL) {
+    ereport(LOG, (errmsg("deleting eRPC server")));
+    delete_server(wal_snd_erpc_server);
   }
 
 	/* Send CommandComplete message */
@@ -1619,33 +1628,45 @@ ProcessRepliesIfAny(void)
 
 	for (;;)
 	{
-		pq_startmsgread();
-		r = pq_getbyte_if_available(&firstchar);
-		if (r < 0)
-		{
-			/* unexpected error or EOF */
-			ereport(COMMERROR,
-					(errcode(ERRCODE_PROTOCOL_VIOLATION),
-					 errmsg("unexpected EOF on standby connection")));
-			proc_exit(0);
-		}
-		if (r == 0)
-		{
-			/* no data available without blocking */
-			pq_endmsgread();
-      //ereport(LOG, (errmsg("No replies to process")));
-			break;
-		}
+    if (USE_ERPC) {
+      run_event_loop(wal_snd_erpc_server, 0);
+      len = get_message(&(reply_message->data));
+      if (len == 0) {
+        // no data available, break
+        break;
+      } else {
+        firstchar = (reply_message->data)[0];
+        reply_message->data++;
+      }
+    } else {
+      pq_startmsgread();
+      r = pq_getbyte_if_available(&firstchar);
+      if (r < 0)
+      {
+        /* unexpected error or EOF */
+        ereport(COMMERROR,
+            (errcode(ERRCODE_PROTOCOL_VIOLATION),
+            errmsg("unexpected EOF on standby connection")));
+        proc_exit(0);
+      }
+      if (r == 0)
+      {
+        /* no data available without blocking */
+        pq_endmsgread();
+        //ereport(LOG, (errmsg("No replies to process")));
+        break;
+      }
 
-		/* Read the message contents */
-		resetStringInfo(&reply_message);
-		if (pq_getmessage(&reply_message, 0))
-		{
-			ereport(COMMERROR,
-					(errcode(ERRCODE_PROTOCOL_VIOLATION),
-					 errmsg("unexpected EOF on standby connection")));
-			proc_exit(0);
-		}
+      /* Read the message contents */
+      resetStringInfo(&reply_message);
+      if (pq_getmessage(&reply_message, 0))
+      {
+        ereport(COMMERROR,
+            (errcode(ERRCODE_PROTOCOL_VIOLATION),
+            errmsg("unexpected EOF on standby connection")));
+        proc_exit(0);
+      }
+    }
 
 		/*
 		 * If we already received a CopyDone from the frontend, the frontend
@@ -2234,14 +2255,6 @@ WalSndLoop(WalSndSendDataCallback send_data)
 		{
       //ereport(LOG, (errmsg("nothing left to be sent")));
 
-      /*
-      if (USE_ERPC) {
-        ereport(LOG, (errmsg("Lets send a 'c' message!")));
-        set_message(erpc_client_blob, "c", 1);
-        ereport(LOG, (errmsg("Sent a 'c' message!")));
-      }
-      */
-
 			/*
 			 * If we're in catchup state, move to streaming.  This is an
 			 * important state change for users to know about, since before
@@ -2751,12 +2764,12 @@ XLogSendPhysical(void)
 
 		/* Send CopyDone */
     ereport(LOG, (errmsg("SENDING EOF MESSAGE IN XLogSendPhysical")));
-    if (erpc_client_blob == (void *)NULL)
+    if (wal_snd_erpc_client == (void *)NULL)
       pq_putmessage_noblock('c', NULL, 0);
     else {
       // send using eRPC
       ereport(LOG, (errmsg("eRPC SENDING \'c\' MESSAGE")));
-      set_message(erpc_client_blob, "c", 1);
+      set_message(wal_snd_erpc_client, "c", 1);
     }
     ereport(LOG, (errmsg("setting streamingDoneSending at 2745")));
 		streamingDoneSending = true;
@@ -2839,7 +2852,7 @@ XLogSendPhysical(void)
 		   tmpbuf.data, sizeof(int64));
 
   //ereport(LOG, (errmsg("We need to send a message!")));
-  if (erpc_client_blob == (void *)NULL)
+  if (wal_snd_erpc_client == (void *)NULL)
     pq_putmessage_noblock('d', output_message.data, output_message.len);
   else {
     // send using eRPC
@@ -2847,7 +2860,7 @@ XLogSendPhysical(void)
     ereport(LOG, (errmsg("basic test\n")));
     char* test_msg = (char*)malloc(10);
     int test_len = sprintf(test_msg, "testmsg");
-    set_message(erpc_client_blob, test_msg, test_len);
+    set_message(wal_snd_erpc_client, test_msg, test_len);
     ereport(LOG, (errmsg("passed\n")));
     */
     //ereport(LOG, (errmsg("eRPC SENDING MESSAGE OF LEN: %d", output_message.len + 1)));
@@ -2855,7 +2868,7 @@ XLogSendPhysical(void)
     char msg_type = 'd';
     memcpy(msg, (char *)(&msg_type), sizeof(char));
     memcpy(msg + 1, (char *)output_message.data, output_message.len);
-    set_message(erpc_client_blob, msg, output_message.len + 1);
+    set_message(wal_snd_erpc_client, msg, output_message.len + 1);
   }
   //ereport(LOG, (errmsg("Message sent!")));
 

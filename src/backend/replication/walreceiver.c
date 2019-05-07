@@ -73,8 +73,13 @@ extern "C" {
 #include "utils/ps_status.h"
 #include "utils/resowner.h"
 #include "utils/timestamp.h"
+#include "myclient.h"
 #include "myserver.h"
 
+// ERPC
+bool USE_ERPC = true;
+erpc_server_t wal_rcv_erpc_server;
+erpc_client_t wal_rcv_erpc_client;
 
 /* GUC variables */
 int			wal_receiver_status_interval;
@@ -211,12 +216,12 @@ WalReceiverMain(void)
   ereport(LOG, (errmsg("Entering WalReceiverMain!")));
 
   // init eRPC server
-  bool USE_ERPC = true;
-  erpc_server_t erpc_server_blob;
   if (USE_ERPC) {
     ereport(LOG, (errmsg("Initializing erpc server\n")));
-    erpc_server_blob = init_server();
-    sleep(5);
+    wal_rcv_erpc_server = init_server(instance_no=1);
+    ereport(LOG, (errmsg("eRPC Server initialized\n")));
+    ereport(LOG, (errmsg("Initializing erpc client\n")));
+    wal_rcv_erpc_client = init_client(instance_no=1);
     ereport(LOG, (errmsg("eRPC Server initialized\n")));
   } else {
     ereport(LOG, (errmsg("Not using eRPC!")));
@@ -466,11 +471,11 @@ WalReceiverMain(void)
 				}
 
 				/* See if we can read data immediately */
-        if (!USE_ERPC || erpc_server_blob == (void *)NULL)
+        if (!USE_ERPC || wal_rcv_erpc_server == (void *)NULL)
           len = walrcv_receive(wrconn, &buf, &wait_fd);
         else {
           // receive using eRPC
-          run_event_loop(erpc_server_blob, 0);
+          run_event_loop(wal_rcv_erpc_server, 0);
           len = get_message(&buf);
           if (len == 0) {
             //*wait_fd = PQsocket(wrconn->streamConn);
@@ -499,7 +504,7 @@ WalReceiverMain(void)
 							 */
 							last_recv_timestamp = GetCurrentTimestamp();
 							ping_sent = false;
-							if (!USE_ERPC || erpc_server_blob == (void *)NULL) {
+							if (!USE_ERPC || wal_rcv_erpc_server == (void *)NULL) {
                 XLogWalRcvProcessMsg(buf[0], &buf[1], len - 1);
               } else {
                 XLogWalRcvProcessMsg(buf[1], &buf[2], len - 2);
@@ -516,16 +521,16 @@ WalReceiverMain(void)
                 endofwal = true;
                 break;
             }
-
-            if (erpc_server_blob == (void *)NULL)
+            
+            if (wal_rcv_erpc_server == (void *)NULL)
               len = walrcv_receive(wrconn, &buf, &wait_fd);
             else {
               // receive using eRPC
-              run_event_loop(erpc_server_blob, 0);
+              run_event_loop(wal_rcv_erpc_server, 0);
               len = get_message(&buf);
               /*
               while (len == 0) {
-                run_event_loop(erpc_server_blob, 0);
+                run_event_loop(wal_rcv_erpc_server, 0);
                 len = get_message(&buf);
               }
               ereport(LOG, (errmsg("broke erpc get_message loop, got %d", len)));
@@ -656,15 +661,6 @@ WalReceiverMain(void)
 					XLogWalRcvSendReply(requestReply, requestReply);
 					XLogWalRcvSendHSFeedback(false);
 				}
-        else if (USE_ERPC) {
-          /*
-          ereport(LOG, (errmsg("send reply")));
-					XLogWalRcvSendReply(true, true);
-          ereport(LOG, (errmsg("send feedback")));
-					XLogWalRcvSendHSFeedback(false);
-          ereport(LOG, (errmsg("both done")));
-          */
-        }
 			}
 
 			/*
@@ -715,11 +711,17 @@ WalReceiverMain(void)
 		}
 		recvFile = -1;
 
-    if (USE_ERPC && erpc_server_blob != (void *)NULL) {
+    if (USE_ERPC && wal_rcv_erpc_server != (void *)NULL) {
       // destroy eRPC server
       ereport(LOG, (errmsg("Deleting eRPC server")));
-      delete_server(erpc_server_blob);
+      delete_server(wal_rcv_erpc_server);
       ereport(LOG, (errmsg("Deleted eRPC server")));
+    }
+    if (USE_ERPC && wal_rcv_erpc_client != (void *)NULL) {
+      // destroy eRPC client
+      ereport(LOG, (errmsg("Deleting eRPC client")));
+      delete_client(wal_rcv_erpc_client);
+      ereport(LOG, (errmsg("Deleted eRPC client")));
     }
 		elog(DEBUG1, "walreceiver ended streaming and awaits new instructions");
 		WalRcvWaitForStartPosition(&startpoint, &startpointTLI);
@@ -1245,7 +1247,13 @@ XLogWalRcvSendReply(bool force, bool requestReply)
 		 (uint32) (applyPtr >> 32), (uint32) applyPtr,
 		 requestReply ? " (reply requested)" : "");
 
-	walrcv_send(wrconn, reply_message.data, reply_message.len);
+  if (!USE_ERPC) {
+    walrcv_send(wrconn, reply_message.data, reply_message.len);
+  } else {
+    char *msg = (char *)malloc(reply_message.len)
+    memcpy(msg, (char *)reply_message.data, reply_message.len)
+    set_message(wal_rcv_erpc_client, msg, reply_message.len)
+  }
 }
 
 /*
@@ -1358,7 +1366,13 @@ XLogWalRcvSendHSFeedback(bool immed)
 	pq_sendint32(&reply_message, xmin_epoch);
 	pq_sendint32(&reply_message, catalog_xmin);
 	pq_sendint32(&reply_message, catalog_xmin_epoch);
-	walrcv_send(wrconn, reply_message.data, reply_message.len);
+  if (!USE_ERPC) {
+    walrcv_send(wrconn, reply_message.data, reply_message.len);
+  } else {
+    char *msg = (char *)malloc(reply_message.len)
+    memcpy(msg, (char *)reply_message.data, reply_message.len)
+    set_message(wal_rcv_erpc_client, msg, reply_message.len)
+  }
 	if (TransactionIdIsValid(xmin) || TransactionIdIsValid(catalog_xmin))
 		master_has_standby_xmin = true;
 	else
