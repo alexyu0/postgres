@@ -130,6 +130,7 @@ int			wal_sender_timeout = 60 * 1000; /* maximum time to send one WAL
 bool		log_replication_commands = false;
 
 // declare eRPC client as NULL at first
+bool USE_ERPC = true;
 erpc_client_t erpc_client_blob = (void *)NULL;
 
 /*
@@ -569,7 +570,8 @@ StartReplication(StartReplicationCmd *cmd)
 	else
 		FlushPtr = GetFlushRecPtr();
 
-	if (cmd->timeline != 0)
+	ereport(LOG, (errmsg("cmd timeline %d, ThisTimeLineID %d", cmd->timeline, ThisTimeLineID)));
+  if (cmd->timeline != 0)
 	{
 		XLogRecPtr	switchpoint;
 
@@ -583,7 +585,8 @@ StartReplication(StartReplicationCmd *cmd)
 		{
 			List	   *timeLineHistory;
 
-			sendTimeLineIsHistoric = true;
+			ereport(LOG, (errmsg("setting sendTimeLineIsHistoric")));
+      sendTimeLineIsHistoric = true;
 
 			/*
 			 * Check that the timeline the client requested exists, and the
@@ -685,13 +688,13 @@ StartReplication(StartReplicationCmd *cmd)
 		/* Main loop of walsender */
 		replication_active = true;
 
-    bool USE_ERPC = true;
     if (USE_ERPC) {
       ereport(LOG, (errmsg("eRPC client initializing")));
       erpc_client_blob = init_client();
       ereport(LOG, (errmsg("eRPC client initialized - ereport")));
     }
     ereport(LOG, (errmsg("entering WalSndLoop")));
+    ereport(LOG, (errmsg("sendTimeLineIsHistoric = %d", sendTimeLineIsHistoric)));
 		WalSndLoop(XLogSendPhysical);
     ereport(LOG, (errmsg("left WalSndLoop")));
 
@@ -1603,6 +1606,7 @@ exec_replication_command(const char *cmd_string)
 static void
 ProcessRepliesIfAny(void)
 {
+  //ereport(LOG, (errmsg("Processing Replies")));
 	unsigned char firstchar;
 	int			r;
 	bool		received = false;
@@ -1625,6 +1629,7 @@ ProcessRepliesIfAny(void)
 		{
 			/* no data available without blocking */
 			pq_endmsgread();
+      //ereport(LOG, (errmsg("No replies to process")));
 			break;
 		}
 
@@ -1652,6 +1657,7 @@ ProcessRepliesIfAny(void)
 							firstchar)));
 
 		/* Handle the very limited subset of commands expected in this phase */
+    //ereport(LOG, (errmsg("processing reply with firstchar - %c", firstchar)));
 		switch (firstchar)
 		{
 				/*
@@ -1670,9 +1676,11 @@ ProcessRepliesIfAny(void)
 				if (!streamingDoneSending)
 				{
 					pq_putmessage_noblock('c', NULL, 0);
+          ereport(LOG, (errmsg("setting streamingDoneSending at 1679")));
 					streamingDoneSending = true;
 				}
 
+        ereport(LOG, (errmsg("setting streamingDoneReceiving at 1683")));
 				streamingDoneReceiving = true;
 				received = true;
 				break;
@@ -2186,8 +2194,8 @@ WalSndLoop(WalSndSendDataCallback send_data)
 		 * ourselves, and the output buffer is empty, it's time to exit
 		 * streaming.
 		 */
-    ereport(LOG, (errmsg("done receiving %d, done sending %d, send pending %d",
-            streamingDoneReceiving, streamingDoneSending, pq_is_send_pending())));
+    //ereport(LOG, (errmsg("done receiving %d, done sending %d, send pending %d",
+        //streamingDoneReceiving, streamingDoneSending, pq_is_send_pending())));
     if (streamingDoneReceiving && streamingDoneSending &&
 			!pq_is_send_pending()) {
       ereport(LOG, (errmsg("break")));
@@ -2200,22 +2208,35 @@ WalSndLoop(WalSndSendDataCallback send_data)
 		 * again until we've flushed it ... but we'd better assume we are not
 		 * caught up.
 		 */
-    ereport(LOG, (errmsg("send pending %d", pq_is_send_pending())));
+    //ereport(LOG, (errmsg("send pending %d", pq_is_send_pending())));
 		if (!pq_is_send_pending()) {
-      ereport(LOG, (errmsg("sending data")));
+      //ereport(LOG, (errmsg("sending data")));
 			send_data();
     } else {
-      ereport(LOG, (errmsg("caught up")));
+      //ereport(LOG, (errmsg("caught up")));
       WalSndCaughtUp = false;
     }
 
 		/* Try to flush pending output to the client */
-		if (pq_flush_if_writable() != 0)
+		if (pq_flush_if_writable() != 0) {
+      ereport(LOG, (errmsg("wal send shuttingdown")));
 			WalSndShutdown();
+    }
+    //ereport(LOG, (errmsg("past pq_flush_if_writable()")));
 
 		/* If nothing remains to be sent right now ... */
 		if (WalSndCaughtUp && !pq_is_send_pending())
 		{
+      //ereport(LOG, (errmsg("nothing left to be sent")));
+
+      /*
+      if (USE_ERPC) {
+        ereport(LOG, (errmsg("Lets send a 'c' message!")));
+        set_message(erpc_client_blob, "c", 1);
+        ereport(LOG, (errmsg("Sent a 'c' message!")));
+      }
+      */
+
 			/*
 			 * If we're in catchup state, move to streaming.  This is an
 			 * important state change for users to know about, since before
@@ -2226,10 +2247,12 @@ WalSndLoop(WalSndSendDataCallback send_data)
 			 */
 			if (MyWalSnd->state == WALSNDSTATE_CATCHUP)
 			{
+        ereport(LOG, (errmsg("catch up done, moving to streaming")));
 				ereport(DEBUG1,
 						(errmsg("\"%s\" has now caught up with upstream server",
 								application_name)));
 				WalSndSetState(WALSNDSTATE_STREAMING);
+        ereport(LOG, (errmsg("now streaming")));
 			}
 
 			/*
@@ -2244,10 +2267,12 @@ WalSndLoop(WalSndSendDataCallback send_data)
 		}
 
 		/* Check for replication timeout. */
-		WalSndCheckTimeOut();
+    //ereport(LOG, (errmsg("checking timeout")));
+		//WalSndCheckTimeOut();
 
 		/* Send keepalive if the time has come */
-		WalSndKeepaliveIfNecessary();
+    //ereport(LOG, (errmsg("sending keepalive")));
+		//WalSndKeepaliveIfNecessary();
 
 		/*
 		 * We don't block if not caught up, unless there is unsent data
@@ -2257,8 +2282,9 @@ WalSndLoop(WalSndSendDataCallback send_data)
 		 * pq_flush_if_writable flushed it all --- we should immediately try
 		 * to send more.
 		 */
-		if ((WalSndCaughtUp && !streamingDoneSending) || pq_is_send_pending())
+		if (!USE_ERPC && ((WalSndCaughtUp && !streamingDoneSending) || pq_is_send_pending()))
 		{
+      ereport(LOG, (errmsg("blocking on socket")));
 			long		sleeptime;
 			int			wakeEvents;
 
@@ -2279,6 +2305,12 @@ WalSndLoop(WalSndSendDataCallback send_data)
 									 MyProcPort->sock, sleeptime,
 									 WAIT_EVENT_WAL_SENDER_MAIN);
 		}
+    else if (USE_ERPC) {
+      // manual sleep for testing
+			long		sleeptime;
+			sleeptime = WalSndComputeSleeptime(GetCurrentTimestamp());
+      //sleep(sleeptime);
+    }
 	}
   ereport(LOG, (errmsg("bye")));
 	return;
@@ -2557,7 +2589,7 @@ retry:
 static void
 XLogSendPhysical(void)
 {
-  ereport(LOG, (errmsg("Entered XLogSendPhysical\n")));
+  //ereport(LOG, (errmsg("Entered XLogSendPhysical\n")));
 	XLogRecPtr	SendRqstPtr;
 	XLogRecPtr	startptr;
 	XLogRecPtr	endptr;
@@ -2701,6 +2733,9 @@ XLogSendPhysical(void)
 	 * replay the partial WAL record either, so it can still follow our
 	 * timeline switch.
 	 */
+
+  //ereport(LOG, (errmsg("sendTimelineIsHistoric: %d | sendTimeLineValidUpTo %ld | sentPtr %d",
+  //  sendTimeLineIsHistoric, (long)sendTimeLineValidUpto, (long)sentPtr)));
 	if (sendTimeLineIsHistoric && sendTimeLineValidUpto <= sentPtr)
 	{
 		/* close the current file. */
@@ -2709,8 +2744,7 @@ XLogSendPhysical(void)
 		sendFile = -1;
 
 		/* Send CopyDone */
-    ereport(LOG, (errmsg("SENDING MESSAGE")));
-    printf("We need to send a message!\n");
+    ereport(LOG, (errmsg("SENDING EOF MESSAGE IN XLogSendPhysical")));
     if (erpc_client_blob == (void *)NULL)
       pq_putmessage_noblock('c', NULL, 0);
     else {
@@ -2718,6 +2752,7 @@ XLogSendPhysical(void)
       ereport(LOG, (errmsg("eRPC SENDING \'c\' MESSAGE")));
       set_message(erpc_client_blob, "c", 1);
     }
+    ereport(LOG, (errmsg("setting streamingDoneSending at 2745")));
 		streamingDoneSending = true;
 
 		WalSndCaughtUp = true;
@@ -2797,7 +2832,7 @@ XLogSendPhysical(void)
 	memcpy(&output_message.data[1 + sizeof(int64) + sizeof(int64)],
 		   tmpbuf.data, sizeof(int64));
 
-  ereport(LOG, (errmsg("We need to send a message!")));
+  //ereport(LOG, (errmsg("We need to send a message!")));
   if (erpc_client_blob == (void *)NULL)
     pq_putmessage_noblock('d', output_message.data, output_message.len);
   else {
@@ -2811,14 +2846,12 @@ XLogSendPhysical(void)
     */
     //ereport(LOG, (errmsg("eRPC SENDING MESSAGE OF LEN: %d", output_message.len + 1)));
     char* msg = (char*)malloc(output_message.len + 1);
-    //int len = sprintf(msg, "d%s", output_message.data);
     char msg_type = 'd';
     memcpy(msg, (char *)(&msg_type), sizeof(char));
-    int len = sprintf(&msg[1], "%s", output_message.data);
     memcpy(msg + 1, (char *)output_message.data, output_message.len);
     set_message(erpc_client_blob, msg, output_message.len + 1);
   }
-  ereport(LOG, (errmsg("Message sent!")));
+  //ereport(LOG, (errmsg("Message sent!")));
 
 	sentPtr = endptr;
 
