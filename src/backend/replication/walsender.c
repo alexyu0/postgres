@@ -547,6 +547,12 @@ SendTimeLineHistory(TimeLineHistoryCmd *cmd)
 static void
 StartReplication(StartReplicationCmd *cmd)
 {
+  if (WAL_SND_USE_ERPC) {
+    ereport(LOG, (errmsg("eRPC server 1 initializing")));
+    wal_snd_erpc_server = init_server(1);
+    ereport(LOG, (errmsg("eRPC server initialized - ereport")));
+  }
+
 	StringInfoData buf;
 	XLogRecPtr	FlushPtr;
 
@@ -694,9 +700,6 @@ StartReplication(StartReplicationCmd *cmd)
       ereport(LOG, (errmsg("eRPC client 0 initializing")));
       wal_snd_erpc_client = init_client(0);
       ereport(LOG, (errmsg("eRPC client initialized - ereport")));
-      ereport(LOG, (errmsg("eRPC server 1 initializing")));
-      wal_snd_erpc_server = init_server(1);
-      ereport(LOG, (errmsg("eRPC server initialized - ereport")));
     }
     ereport(LOG, (errmsg("entering WalSndLoop")));
     ereport(LOG, (errmsg("sendTimeLineIsHistoric = %d", sendTimeLineIsHistoric)));
