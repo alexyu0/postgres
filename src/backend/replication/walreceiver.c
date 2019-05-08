@@ -220,14 +220,9 @@ WalReceiverMain(void)
     ereport(LOG, (errmsg("Initializing erpc server 0\n")));
     wal_rcv_erpc_server = init_server(0);
     ereport(LOG, (errmsg("eRPC Server initialized\n")));
-    ereport(LOG, (errmsg("Initializing erpc client 1\n")));
-    wal_rcv_erpc_client = init_client(1);
-    ereport(LOG, (errmsg("eRPC Server initialized\n")));
   } else {
     ereport(LOG, (errmsg("Not using eRPC!")));
   }
-
-
 
 	/*
 	 * WalRcv should be set up already (if we are a backend, we inherit this
@@ -444,6 +439,11 @@ WalReceiverMain(void)
 			ping_sent = false;
 
 			/* Loop until end-of-streaming or error */
+      if (WAL_RCV_USE_ERPC) {
+        ereport(LOG, (errmsg("Initializing erpc client 1\n")));
+        wal_rcv_erpc_client = init_client(1);
+        ereport(LOG, (errmsg("eRPC client initialized\n")));
+      }
 			for (;;)
 			{
 				char	   *buf;
